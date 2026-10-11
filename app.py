@@ -345,13 +345,18 @@ def sinkronkan_data_dari_drive(folder_id):
         return 0
 
 # ============================================================
-# INISIALISASI SESSION STATE
+# INISIALISASI SESSION STATE & AUTO-SYNC PERTAMA LOAD
 # ============================================================
 
-if "monthly_data" not in st.session_state:
-    st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-
 DEFAULT_FOLDER_ID = str(st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJkG3jX3U")).strip()
+
+if "monthly_data" not in st.session_state or "initial_synced" not in st.session_state:
+    st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+    try:
+        sinkronkan_data_dari_drive(DEFAULT_FOLDER_ID)
+        st.session_state.initial_synced = True
+    except Exception:
+        pass
 
 def buat_dataframe_bulan(bulan):
     data = st.session_state.monthly_data.get(bulan, {})
@@ -506,7 +511,6 @@ def buat_grafik_top3_bulanan():
             marker_color=warna_rank[rank_val],
             marker_line_color="rgba(255,255,255,0.08)",
             marker_line_width=1,
-            # Tidak ada text di bar -- tampilkan jumlah saja via hover
             hovertemplate=(
                 "<b>%{x}</b><br>"
                 "Jenis Defect: <b>%{customdata}</b><br>"
@@ -551,7 +555,6 @@ def buat_grafik_top3_bulanan():
         height=420,
     )
     return fig
-
 
 # ============================================================
 # NAVIGASI SIDEBAR

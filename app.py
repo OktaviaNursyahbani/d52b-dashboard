@@ -647,4 +647,65 @@ elif halaman == "Upload / Sinkronisasi Data":
     tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
 
     with tab1:
-        st
+        st.subheader("Baca Otomatis Folder Google Drive")
+        st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
+        
+        folder_input = st.text_input("ID Folder Google Drive", value=DEFAULT_FOLDER_ID)
+
+        if st.button("🔄 Sync Data dari Google Drive", type="primary"):
+            with st.spinner("Membaca dan memproses file dari Google Drive..."):
+                synced_count = sinkronkan_data_dari_drive(folder_input)
+                if synced_count > 0:
+                    st.success(f"Berhasil membaca {synced_count} file rekap dari Google Drive!")
+                else:
+                    st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
+
+    with tab2:
+        st.subheader("Upload File Excel Langsung ke Google Drive")
+        uploaded_file = st.file_uploader("Pilih File Excel (.xlsx)", type=["xlsx", "xls"])
+
+        if uploaded_file is not None:
+            if st.button("🚀 Upload File & Sync Dashboard", type="primary"):
+                with st.spinner("Mengunggah file ke Google Drive..."):
+                    file_bytes = uploaded_file.getvalue()
+                    file_name = uploaded_file.name
+
+                    if unggah_file_ke_drive(file_bytes, file_name, folder_input):
+                        st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
+                        
+                        synced = sinkronkan_data_dari_drive(folder_input)
+                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} file terproses)")
+
+    st.markdown("---")
+    st.subheader("🗑️ Bersihkan Data Sesi")
+    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tampil di dashboard dan memulai dari awal.")
+
+    if st.button("🚨 Hapus / Clear Seluruh Data Dashboard"):
+        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+        st.success("Seluruh data dashboard berhasil dibersihkan!")
+        st.rerun()
+
+# ============================================================
+# HALAMAN 5: EKSPOR LAPORAN
+# ============================================================
+
+elif halaman == "Ekspor Laporan":
+    st.title("Ekspor & Manajemen Data")
+
+    semua_rekap = buat_dataframe_keseluruhan()
+
+    if semua_rekap.empty:
+        st.info("Belum ada data yang tersedia untuk diekspor.")
+    else:
+        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
+
+        st.download_button(
+            "Unduh Laporan Excel",
+            data=buffer.getvalue(),
+            file_name="Laporan_Kualitas_D52B.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )

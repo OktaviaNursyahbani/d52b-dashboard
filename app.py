@@ -131,7 +131,8 @@ JENIS_NG = [
     "Benang Pecah", "Jahitan kenceng", "Benang over/ Keluar", "Bahan terlipat/Terjahit",
     "Tepu tidak terpotong", "Takure", "Sampah Benang Terjahit", "Kuncian putus/ Lepas / Tidak ada",
     "Noda bahan", "Part tidak terpasang", "Part terpasang terbalik", "Part salah pasang",
-    "Tidak ada sutechi", "Part terpasang Double", "Over part", "Tidak ada Piping", "GAP Bahan Tidak Standar"
+    "Tidak ada sutechi", "Part terpasang Double", "Over part", "Tidak ada Piping", "GAP Bahan Tidak Standar",
+    "Arah motif terbalik", "Cacat bahan"
 ]
 
 PEMETAAN_AREA_LEADER = {
@@ -217,25 +218,6 @@ def deteksi_bulan_dari_dataframe(df, sheet_name=""):
                 if m: return m
     return None
 
-def cari_kolom_area(df):
-    ditemukan = {}
-    for r in range(min(len(df), 30)):
-        for c in range(len(df.columns)):
-            val = df.iloc[r, c]
-            if pd.notna(val):
-                area = normalisasi_area(val)
-                if area and area not in ditemukan: ditemukan[area] = c
-    return ditemukan
-
-def cari_kolom_total(df):
-    for c, col in enumerate(df.columns):
-        if normalisasi_teks(col) == "total": return c
-    for r in range(min(len(df), 20)):
-        for c in range(len(df.columns)):
-            val = df.iloc[r, c]
-            if pd.notna(val) and normalisasi_teks(val) == "total": return c
-    return None
-
 def cari_ng_dalam_baris(row):
     for val in row.iloc[:8]:
         if pd.notna(val):
@@ -245,40 +227,30 @@ def cari_ng_dalam_baris(row):
 
 def baca_sheet_d52b(df, sheet_name):
     bulan = deteksi_bulan_dari_dataframe(df, sheet_name)
-    kolom_area = cari_kolom_area(df)
-    hasil_area, hasil_total = {}, {}
+    hasil_total = {}
 
-    if len(kolom_area) >= 2:
-        total_col = cari_kolom_total(df)
-        for idx_baris in range(len(df)):
-            baris = df.iloc[idx_baris]
-            nama_ng = cari_ng_dalam_baris(baris)
-            if not nama_ng or normalisasi_teks(nama_ng) == "total": continue
-
-            nilai_area = {area: bersihkan_angka(df.iloc[idx_baris, kolom_area[area]]) if area in kolom_area else 0 for area in NAMA_AREA}
-            total_dari_area = sum(nilai_area.values())
-
-            if total_dari_area == 0 and total_col is not None:
-                val_total = bersihkan_angka(df.iloc[idx_baris, total_col])
-                if val_total > 0: hasil_total[nama_ng] = val_total
-            else:
-                hasil_total[nama_ng] = total_dari_area
-
-            if nama_ng not in hasil_area: hasil_area[nama_ng] = {a: 0 for a in NAMA_AREA}
-            for area in NAMA_AREA: hasil_area[nama_ng][area] += nilai_area[area]
-
-        return {"month": bulan, "area_data": hasil_area, "total_data": hasil_total, "success": len(hasil_area) > 0}
-
-    total_col = cari_kolom_total(df)
-    fallback_total = {}
     for idx_baris in range(len(df)):
         baris = df.iloc[idx_baris]
         nama_ng = cari_ng_dalam_baris(baris)
-        if not nama_ng: continue
-        if total_col is not None:
-            fallback_total[nama_ng] = bersihkan_angka(df.iloc[idx_baris, total_col])
+        if not nama_ng or normalisasi_teks(nama_ng) == "total": 
+            continue
 
-    return {"month": bulan, "area_data": {}, "total_data": fallback_total, "success": len(fallback_total) > 0}
+        # 1. Baca dari kolom Total (Kolom 13 / M pada SUMMARY D52B)
+        total_val = 0
+        if len(baris) > 13 and pd.notna(baris.iloc[13]):
+            total_val = bersihkan_angka(baris.iloc[13])
+        
+        # 2. Jika kolom 13 kosong, hitung dari penjumlahan kolom area (kolom 3-12)
+        if total_val == 0:
+            sum_area = 0
+            for col_idx in range(3, min(13, len(baris))):
+                sum_area += bersihkan_angka(baris.iloc[col_idx])
+            total_val = sum_area
+
+        if total_val > 0:
+            hasil_total[nama_ng] = total_val
+
+    return {"month": bulan, "area_data": {}, "total_data": hasil_total, "success": len(hasil_total) > 0}
 
 # ============================================================
 # FUNGSI DATABASE GOOGLE DRIVE

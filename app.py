@@ -445,75 +445,112 @@ def buat_grafik_tren_bulanan(df):
     )
     return fig
 
-def buat_grafik_tren_top3_bulanan():
+def buat_tabel_top3_bulanan():
+    """DataFrame ringkasan: Top 3 NG per bulan"""
+    semua_df = buat_dataframe_keseluruhan()
+    if semua_df.empty:
+        return pd.DataFrame()
+
+    baris = []
+    for m in BULAN_LIST:
+        df_m = semua_df[semua_df["Bulan"] == m]
+        if df_m.empty:
+            continue
+        top3 = df_m.groupby("NG")["Jumlah"].sum().sort_values(ascending=False).head(3).reset_index()
+        for rank, (_, row) in enumerate(top3.iterrows(), 1):
+            medali = {1: "🥇", 2: "🥈", 3: "🥉"}[rank]
+            baris.append({
+                "Bulan": m,
+                "Peringkat": f"{medali} #{rank}",
+                "Jenis Defect (NG)": row["NG"],
+                "Jumlah": int(row["Jumlah"])
+            })
+    return pd.DataFrame(baris) if baris else pd.DataFrame()
+
+def buat_grafik_top3_bulanan():
+    """Grafik bar: tepat 3 bar per bulan, warna berdasarkan peringkat"""
     semua_df = buat_dataframe_keseluruhan()
     if semua_df.empty:
         return None
 
-    # Filter Top 3 per bulan untuk Januari - September
-    top3_per_bulan = []
-    for m in BULAN_LIST[:9]:
+    rows_top3 = []
+    for m in BULAN_LIST:
         df_m = semua_df[semua_df["Bulan"] == m]
-        if not df_m.empty:
-            top3 = df_m.sort_values("Jumlah", ascending=False).head(3)
-            top3_per_bulan.append(top3)
+        if df_m.empty:
+            continue
+        top3 = df_m.groupby("NG")["Jumlah"].sum().sort_values(ascending=False).head(3).reset_index()
+        for rank, (_, row) in enumerate(top3.iterrows(), 1):
+            # Potong nama NG agar tidak terlalu panjang di label bar
+            nama_ng = row["NG"]
+            nama_pendek = nama_ng[:15] + "…" if len(nama_ng) > 15 else nama_ng
+            rows_top3.append({
+                "Bulan": m,
+                "Rank": f"#{rank}",
+                "NG_Lengkap": nama_ng,
+                "NG_Pendek": nama_pendek,
+                "Jumlah": int(row["Jumlah"])
+            })
 
-    if not top3_per_bulan:
+    if not rows_top3:
         return None
 
-    df_top3_concat = pd.concat(top3_per_bulan)
-    jenis_ng_top3 = df_top3_concat["NG"].unique()
+    df_top3 = pd.DataFrame(rows_top3)
+    bulan_ada = [m for m in BULAN_LIST if m in df_top3["Bulan"].values]
 
-    # Ambil data jenis NG yang pernah masuk Top 3
-    df_filtered = semua_df[semua_df["NG"].isin(jenis_ng_top3)].copy()
+    # Warna: Emas, Perak, Perunggu
+    warna_rank = {"#1": "#f59e0b", "#2": "#94a3b8", "#3": "#cd7c2f"}
 
-    # Palette warna kontras dan profesional
-    skema_warna = {
-        "Benang over/ Keluar": "#3b82f6",       # Biru
-        "Benang kendor (Machine)": "#f59e0b",   # Amber / Kuning
-        "Jarak jahitan tidak standar": "#ef4444", # Merah
-        "Benang Pecah": "#8b5cf6",               # Ungu
-        "Cacat bahan": "#10b981"                 # Hijau
-    }
-
-    # Buat Grouped Bar Chart yang rapi dan mudah dibaca
-    fig = px.bar(
-        df_filtered,
-        x="Bulan",
-        y="Jumlah",
-        color="NG",
-        barmode="group",
-        text_auto=True,
-        category_orders={"Bulan": BULAN_LIST[:9]},
-        color_discrete_map=skema_warna,
-        title="<b>Perbandingan Volume Defect Top 3 per Bulan (Jan–Sep)</b>"
-    )
-
-    fig.update_traces(
-        textposition="outside",
-        textfont=dict(size=11, color="#f8fafc"),
-        cliponaxis=False
-    )
+    fig = go.Figure()
+    for rank_val in ["#1", "#2", "#3"]:
+        df_r = df_top3[df_top3["Rank"] == rank_val]
+        nama_peringkat = {"#1": "🥇 Peringkat 1", "#2": "🥈 Peringkat 2", "#3": "🥉 Peringkat 3"}[rank_val]
+        fig.add_trace(go.Bar(
+            name=nama_peringkat,
+            x=df_r["Bulan"],
+            y=df_r["Jumlah"],
+            marker_color=warna_rank[rank_val],
+            marker_line_color="rgba(0,0,0,0.2)",
+            marker_line_width=1,
+            text=df_r["NG_Pendek"],
+            textposition="outside",
+            textfont=dict(size=9, color="#e2e8f0"),
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                + nama_peringkat + "<br>"
+                "<b>Defect:</b> %{customdata}<br>"
+                "<b>Jumlah:</b> %{y} pcs<extra></extra>"
+            ),
+            customdata=df_r["NG_Lengkap"]
+        ))
 
     fig.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        barmode="group",
+        title=dict(text="<b>Top 3 Defect per Bulan</b>", font=dict(color="#f8fafc", size=14)),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family="Inter, sans-serif", color="#94a3b8"),
-        margin=dict(l=10, r=10, t=60, b=40),
+        margin=dict(l=10, r=10, t=80, b=60),
         autosize=True,
-        xaxis=dict(title="", gridcolor="#1e293b", showgrid=False),
+        xaxis=dict(
+            title="",
+            categoryorder="array",
+            categoryarray=bulan_ada,
+            gridcolor="#1e293b",
+            showgrid=False
+        ),
         yaxis=dict(title="Jumlah Defect (Pcs)", gridcolor="#1e293b", showgrid=True),
         legend=dict(
-            title="<b>Jenis Defect Utama:</b>",
+            title="<b>Peringkat:</b>",
             orientation="h",
             yanchor="bottom",
-            y=1.05,
-            xanchor="left",
-            x=0
+            y=1.02,
+            xanchor="right",
+            x=1
         ),
-        bargap=0.2,
-        bargroupgap=0.08,
-        height=450,
+        bargap=0.25,
+        bargroupgap=0.05,
+        height=480,
     )
     return fig
 
@@ -578,15 +615,20 @@ if halaman == "Ringkasan Dashboard":
         st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
 
     st.markdown("---")
-    st.subheader("📊 Grafik Tren Top 3 Defect (Januari – September)")
-    st.caption("Menampilkan tren pergerakan khusus untuk jenis defect yang paling sering masuk 3 besar di setiap bulan.")
+    st.subheader("📊 Top 3 Defect per Bulan")
+    st.caption("Tepat 3 jenis defect teratas di setiap bulan — hover untuk melihat nama lengkap.")
 
     if not semua_data.empty:
-        fig_top3 = buat_grafik_tren_top3_bulanan()
+        fig_top3 = buat_grafik_top3_bulanan()
         if fig_top3:
             st.plotly_chart(fig_top3, use_container_width=True)
+
+        df_tabel_top3 = buat_tabel_top3_bulanan()
+        if not df_tabel_top3.empty:
+            with st.expander("📋 Lihat Tabel Ringkasan Top 3 per Bulan"):
+                st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
         else:
-            st.info("Data belum cukup untuk menampilkan grafik Top 3.")
+            st.info("Data belum cukup untuk menampilkan Top 3.")
     else:
         st.info("Sinkronkan data terlebih dahulu untuk melihat grafik tren Top 3.")
 

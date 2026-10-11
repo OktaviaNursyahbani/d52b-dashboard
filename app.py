@@ -458,17 +458,16 @@ def buat_tabel_top3_bulanan():
             continue
         top3 = df_m.groupby("NG")["Jumlah"].sum().sort_values(ascending=False).head(3).reset_index()
         for rank, (_, row) in enumerate(top3.iterrows(), 1):
-            medali = {1: "🥇", 2: "🥈", 3: "🥉"}[rank]
             baris.append({
                 "Bulan": m,
-                "Peringkat": f"{medali} #{rank}",
+                "Peringkat": f"#{rank}",
                 "Jenis Defect (NG)": row["NG"],
                 "Jumlah": int(row["Jumlah"])
             })
     return pd.DataFrame(baris) if baris else pd.DataFrame()
 
 def buat_grafik_top3_bulanan():
-    """Grafik bar: tepat 3 bar per bulan, warna berdasarkan peringkat"""
+    """Grafik bar: tepat 3 bar per bulan, warna berdasarkan peringkat (tanpa teks di bar)"""
     semua_df = buat_dataframe_keseluruhan()
     if semua_df.empty:
         return None
@@ -480,14 +479,10 @@ def buat_grafik_top3_bulanan():
             continue
         top3 = df_m.groupby("NG")["Jumlah"].sum().sort_values(ascending=False).head(3).reset_index()
         for rank, (_, row) in enumerate(top3.iterrows(), 1):
-            # Potong nama NG agar tidak terlalu panjang di label bar
-            nama_ng = row["NG"]
-            nama_pendek = nama_ng[:15] + "…" if len(nama_ng) > 15 else nama_ng
             rows_top3.append({
                 "Bulan": m,
                 "Rank": f"#{rank}",
-                "NG_Lengkap": nama_ng,
-                "NG_Pendek": nama_pendek,
+                "NG_Lengkap": row["NG"],
                 "Jumlah": int(row["Jumlah"])
             })
 
@@ -497,60 +492,63 @@ def buat_grafik_top3_bulanan():
     df_top3 = pd.DataFrame(rows_top3)
     bulan_ada = [m for m in BULAN_LIST if m in df_top3["Bulan"].values]
 
-    # Warna: Emas, Perak, Perunggu
-    warna_rank = {"#1": "#f59e0b", "#2": "#94a3b8", "#3": "#cd7c2f"}
+    # Palette biru profesional: Rank 1 paling gelap, rank 3 paling terang
+    warna_rank = {"#1": "#1d4ed8", "#2": "#3b82f6", "#3": "#93c5fd"}
+    label_rank = {"#1": "Rank 1 (Tertinggi)", "#2": "Rank 2", "#3": "Rank 3"}
 
     fig = go.Figure()
     for rank_val in ["#1", "#2", "#3"]:
         df_r = df_top3[df_top3["Rank"] == rank_val]
-        nama_peringkat = {"#1": "🥇 Peringkat 1", "#2": "🥈 Peringkat 2", "#3": "🥉 Peringkat 3"}[rank_val]
         fig.add_trace(go.Bar(
-            name=nama_peringkat,
+            name=label_rank[rank_val],
             x=df_r["Bulan"],
             y=df_r["Jumlah"],
             marker_color=warna_rank[rank_val],
-            marker_line_color="rgba(0,0,0,0.2)",
+            marker_line_color="rgba(255,255,255,0.08)",
             marker_line_width=1,
-            text=df_r["NG_Pendek"],
-            textposition="outside",
-            textfont=dict(size=9, color="#e2e8f0"),
-            cliponaxis=False,
+            # Tidak ada text di bar -- tampilkan jumlah saja via hover
             hovertemplate=(
                 "<b>%{x}</b><br>"
-                + nama_peringkat + "<br>"
-                "<b>Defect:</b> %{customdata}<br>"
-                "<b>Jumlah:</b> %{y} pcs<extra></extra>"
+                "Jenis Defect: <b>%{customdata}</b><br>"
+                "Jumlah: <b>%{y} pcs</b><extra></extra>"
             ),
             customdata=df_r["NG_Lengkap"]
         ))
 
     fig.update_layout(
         barmode="group",
-        title=dict(text="<b>Top 3 Defect per Bulan</b>", font=dict(color="#f8fafc", size=14)),
+        title=dict(text="Top 3 Defect per Bulan", font=dict(color="#f8fafc", size=14, family="Inter, sans-serif")),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, sans-serif", color="#94a3b8"),
-        margin=dict(l=10, r=10, t=80, b=60),
+        font=dict(family="Inter, sans-serif", color="#94a3b8", size=12),
+        margin=dict(l=10, r=10, t=70, b=40),
         autosize=True,
         xaxis=dict(
             title="",
             categoryorder="array",
             categoryarray=bulan_ada,
             gridcolor="#1e293b",
-            showgrid=False
+            showgrid=False,
+            tickfont=dict(color="#cbd5e1", size=12)
         ),
-        yaxis=dict(title="Jumlah Defect (Pcs)", gridcolor="#1e293b", showgrid=True),
+        yaxis=dict(
+            title="Jumlah Defect (Pcs)",
+            gridcolor="#1e293b",
+            showgrid=True,
+            tickfont=dict(color="#cbd5e1")
+        ),
         legend=dict(
-            title="<b>Peringkat:</b>",
+            title=dict(text="Peringkat", font=dict(color="#94a3b8")),
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
-            x=1
+            x=1,
+            font=dict(color="#cbd5e1")
         ),
-        bargap=0.25,
-        bargroupgap=0.05,
-        height=480,
+        bargap=0.3,
+        bargroupgap=0.06,
+        height=420,
     )
     return fig
 
@@ -560,7 +558,7 @@ def buat_grafik_top3_bulanan():
 # ============================================================
 
 with st.sidebar:
-    st.markdown("### ⚡ Quality Hub D52B")
+    st.markdown("### D52B Quality Hub")
     st.caption("Dashboard Sewing Assembly")
     st.markdown("---")
 
@@ -615,8 +613,8 @@ if halaman == "Ringkasan Dashboard":
         st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
 
     st.markdown("---")
-    st.subheader("📊 Top 3 Defect per Bulan")
-    st.caption("Tepat 3 jenis defect teratas di setiap bulan — hover untuk melihat nama lengkap.")
+    st.subheader("Top 3 Defect per Bulan")
+    st.caption("Tepat 3 jenis defect teratas di setiap bulan. Arahkan kursor ke bar untuk melihat nama lengkap.")
 
     if not semua_data.empty:
         fig_top3 = buat_grafik_top3_bulanan()
@@ -625,7 +623,7 @@ if halaman == "Ringkasan Dashboard":
 
         df_tabel_top3 = buat_tabel_top3_bulanan()
         if not df_tabel_top3.empty:
-            with st.expander("📋 Lihat Tabel Ringkasan Top 3 per Bulan"):
+            with st.expander("Lihat Tabel Ringkasan Top 3 per Bulan"):
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
         else:
             st.info("Data belum cukup untuk menampilkan Top 3.")

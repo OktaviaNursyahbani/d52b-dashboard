@@ -11,18 +11,18 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 
 # ============================================================
-# PAGE CONFIGURATION
+# KONFIGURASI HALAMAN
 # ============================================================
 
 st.set_page_config(
-    page_title="D52B Quality Control Hub",
+    page_title="Pusat Kontrol Kualitas D52B",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ============================================================
-# RESPONSIVE INDUSTRIAL CSS
+# TAMPILAN CSS INDUSTRI RESPONTIF
 # ============================================================
 
 st.markdown("""
@@ -101,15 +101,15 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# CONSTANTS & CONFIG
+# KONSTANTA DAN KONFIGURASI
 # ============================================================
 
-MONTHS = [
+BULAN_LIST = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember"
 ]
 
-MONTH_ALIASES = {
+ALIAS_BULAN = {
     "jan": "Januari", "january": "Januari", "januari": "Januari",
     "feb": "Februari", "february": "Februari", "februari": "Februari",
     "mar": "Maret", "march": "Maret", "maret": "Maret",
@@ -124,7 +124,7 @@ MONTH_ALIASES = {
     "dec": "Desember", "des": "Desember", "desember": "Desember"
 }
 
-NG_TYPES = [
+JENIS_NG = [
     "Jarak jahitan tidak standar", "Bahan Balap Tidak Standar", "Langkah Jahitan tidak standar",
     "Point tidak center", "Lipatan tidak standar", "Jahitan putus", "Jahitan loncat",
     "Jahitan keriput", "Jahitan gelombang", "Ex jarum", "Benang kendor (Machine)",
@@ -134,7 +134,7 @@ NG_TYPES = [
     "Tidak ada sutechi", "Part terpasang Double", "Over part", "Tidak ada Piping", "GAP Bahan Tidak Standar"
 ]
 
-AREA_LEADER_MAP = {
+PEMETAAN_AREA_LEADER = {
     "FB RH": {"nama_area": "Front Back RH", "leader": "Bu Kiki"},
     "FB LH": {"nama_area": "Front Back LH", "leader": "Bu Kiki"},
     "FC RH": {"nama_area": "Front Cushion RH", "leader": "Pak Heri"},
@@ -147,18 +147,18 @@ AREA_LEADER_MAP = {
     "R2C": {"nama_area": "Rear 2 Cushion", "leader": "Pak Rosim"}
 }
 
-AREA_NAMES = list(AREA_LEADER_MAP.keys())
+NAMA_AREA = list(PEMETAAN_AREA_LEADER.keys())
 
 # ============================================================
-# HELPER FUNCTIONS
+# FUNGSI BANTUAN DATA
 # ============================================================
 
-def normalize_text(value):
+def normalisasi_teks(value):
     if value is None: return ""
     text = str(value).strip().lower().replace("\n", " ").replace("\r", " ").replace("_", " ")
     return re.sub(r"\s+", " ", text).strip()
 
-def clean_number(value):
+def bersihkan_angka(value):
     if value is None: return 0
     if isinstance(value, (int, np.integer)): return int(value)
     if isinstance(value, (float, np.floating)): return 0 if np.isnan(value) else int(round(value))
@@ -171,13 +171,13 @@ def clean_number(value):
     try: return int(float(text))
     except Exception: return 0
 
-def format_int(value):
+def format_angka(value):
     try: return f"{int(round(value)):,}".replace(",", ".")
     except Exception: return "0"
 
-def normalize_ng_name(value):
-    text = normalize_text(value)
-    replacements = {
+def normalisasi_nama_ng(value):
+    text = normalisasi_teks(value)
+    pengganti = {
         "benang kendor ( machine )": "Benang kendor (Machine)",
         "benang kendor (machine)": "Benang kendor (Machine)",
         "benang over/ keluar": "Benang over/ Keluar",
@@ -185,112 +185,108 @@ def normalize_ng_name(value):
         "bahan balap tidak standar": "Bahan Balap Tidak Standar",
         "gap bahan tidak standar": "GAP Bahan Tidak Standar"
     }
-    if text in replacements: return replacements[text]
-    for item in NG_TYPES:
-        if normalize_text(item) == text: return item
+    if text in pengganti: return pengganti[text]
+    for item in JENIS_NG:
+        if normalisasi_teks(item) == text: return item
     return str(value).strip()
 
-def normalize_area(value):
-    text = normalize_text(value)
-    aliases = {a.lower(): a for a in AREA_NAMES}
-    return aliases.get(text)
+def normalisasi_area(value):
+    text = normalisasi_teks(value)
+    alias = {a.lower(): a for a in NAMA_AREA}
+    return alias.get(text)
 
-def detect_month_from_text(text):
+def deteksi_bulan_dari_teks(text):
     if not text: return None
-    value = normalize_text(text)
-    pattern = r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|okt|nov|dec|des)[\s\-_\/]*\d{2,4}\b"
-    match = re.search(pattern, value)
-    if match: return MONTH_ALIASES.get(match.group(1))
-    for alias, month in MONTH_ALIASES.items():
-        if alias in value: return month
+    value = normalisasi_teks(text)
+    pola = r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|okt|nov|dec|des)[\s\-_\/]*\d{2,4}\b"
+    match = re.search(pola, value)
+    if match: return ALIAS_BULAN.get(match.group(1))
+    for alias, bulan in ALIAS_BULAN.items():
+        if alias in value: return bulan
     return None
 
-def detect_month_from_dataframe(df, sheet_name=""):
-    month = detect_month_from_text(sheet_name)
-    if month: return month
+def deteksi_bulan_dari_dataframe(df, sheet_name=""):
+    bulan = deteksi_bulan_dari_teks(sheet_name)
+    if bulan: return bulan
     for r in range(min(len(df), 25)):
         for c in range(min(len(df.columns), 15)):
             val = df.iloc[r, c]
             if pd.notna(val):
-                m = detect_month_from_text(str(val))
+                m = deteksi_bulan_dari_teks(str(val))
                 if m: return m
     return None
 
-def find_area_columns(df):
-    found = {}
+def cari_kolom_area(df):
+    ditemukan = {}
     for r in range(min(len(df), 30)):
         for c in range(len(df.columns)):
             val = df.iloc[r, c]
             if pd.notna(val):
-                area = normalize_area(val)
-                if area and area not in found: found[area] = c
-    return found
+                area = normalisasi_area(val)
+                if area and area not in ditemukan: ditemukan[area] = c
+    return ditemukan
 
-def find_total_column(df):
+def cari_kolom_total(df):
     for c, col in enumerate(df.columns):
-        if normalize_text(col) == "total": return c
+        if normalisasi_teks(col) == "total": return c
     for r in range(min(len(df), 20)):
         for c in range(len(df.columns)):
             val = df.iloc[r, c]
-            if pd.notna(val) and normalize_text(val) == "total": return c
+            if pd.notna(val) and normalisasi_teks(val) == "total": return c
     return None
 
-def find_ng_in_row(row):
+def cari_ng_dalam_baris(row):
     for val in row.iloc[:8]:
         if pd.notna(val):
-            norm = normalize_ng_name(val)
-            if norm in NG_TYPES: return norm
+            norm = normalisasi_nama_ng(val)
+            if norm in JENIS_NG: return norm
     return None
 
-def parse_d52b_sheet(df, sheet_name):
-    month = detect_month_from_dataframe(df, sheet_name)
-    area_columns = find_area_columns(df)
-    result_area, result_total = {}, {}
+def baca_sheet_d52b(df, sheet_name):
+    bulan = deteksi_bulan_dari_dataframe(df, sheet_name)
+    kolom_area = cari_kolom_area(df)
+    hasil_area, hasil_total = {}, {}
 
-    if len(area_columns) >= 2:
-        total_col = find_total_column(df)
-        for row_index in range(len(df)):
-            row = df.iloc[row_index]
-            ng_name = find_ng_in_row(row)
-            if not ng_name or normalize_text(ng_name) == "total": continue
+    if len(kolom_area) >= 2:
+        total_col = cari_kolom_total(df)
+        for idx_baris in range(len(df)):
+            baris = df.iloc[idx_baris]
+            nama_ng = cari_ng_dalam_baris(baris)
+            if not nama_ng or normalisasi_teks(nama_ng) == "total": continue
 
-            area_values = {area: clean_number(df.iloc[row_index, area_columns[area]]) if area in area_columns else 0 for area in AREA_NAMES}
-            total_from_area = sum(area_values.values())
+            nilai_area = {area: bersihkan_angka(df.iloc[idx_baris, kolom_area[area]]) if area in kolom_area else 0 for area in NAMA_AREA}
+            total_dari_area = sum(nilai_area.values())
 
-            if total_from_area == 0 and total_col is not None:
-                total_val = clean_number(df.iloc[row_index, total_col])
-                if total_val > 0: result_total[ng_name] = total_val
+            if total_dari_area == 0 and total_col is not None:
+                val_total = bersihkan_angka(df.iloc[idx_baris, total_col])
+                if val_total > 0: hasil_total[nama_ng] = val_total
             else:
-                result_total[ng_name] = total_from_area
+                hasil_total[nama_ng] = total_dari_area
 
-            if ng_name not in result_area: result_area[ng_name] = {a: 0 for a in AREA_NAMES}
-            for area in AREA_NAMES: result_area[ng_name][area] += area_values[area]
+            if nama_ng not in hasil_area: hasil_area[nama_ng] = {a: 0 for a in NAMA_AREA}
+            for area in NAMA_AREA: hasil_area[nama_ng][area] += nilai_area[area]
 
-        return {"month": month, "area_data": result_area, "total_data": result_total, "success": len(result_area) > 0}
+        return {"month": bulan, "area_data": hasil_area, "total_data": hasil_total, "success": len(hasil_area) > 0}
 
-    total_col = find_total_column(df)
+    total_col = cari_kolom_total(df)
     fallback_total = {}
-    for row_index in range(len(df)):
-        row = df.iloc[row_index]
-        ng_name = find_ng_in_row(row)
-        if not ng_name: continue
+    for idx_baris in range(len(df)):
+        baris = df.iloc[idx_baris]
+        nama_ng = cari_ng_dalam_baris(baris)
+        if not nama_ng: continue
         if total_col is not None:
-            fallback_total[ng_name] = clean_number(df.iloc[row_index, total_col])
+            fallback_total[nama_ng] = bersihkan_angka(df.iloc[idx_baris, total_col])
 
-    return {"month": month, "area_data": {}, "total_data": fallback_total, "success": len(fallback_total) > 0}
+    return {"month": bulan, "area_data": {}, "total_data": fallback_total, "success": len(fallback_total) > 0}
 
 # ============================================================
-# GOOGLE DRIVE DATABASE FUNCTIONS
+# FUNGSI DATABASE GOOGLE DRIVE
 # ============================================================
 
-def get_drive_service():
-    """Membuat koneksi ke Google Drive Service Account"""
+def buat_koneksi_drive():
     try:
-        # Menggunakan kredensial dari gsheets/service_account di Secrets
         creds_info = dict(st.secrets.get("connections", {}).get("gsheets", {}))
-        
-        if not creds_info:
-            creds_info = dict(st.secrets)
+        if not creds_info: creds_info = dict(st.secrets)
 
         if "private_key" in creds_info:
             pk = str(creds_info["private_key"]).strip().strip("'\"").replace("\\n", "\n")
@@ -307,44 +303,35 @@ def get_drive_service():
         st.error(f"Koneksi Google Drive Gagal: {e}")
         return None
 
-def upload_file_to_gdrive(file_bytes, file_name, folder_id):
-    """Mengunggah file Excel dari pengguna langsung ke Folder Google Drive"""
-    service = get_drive_service()
+def unggah_file_ke_drive(file_bytes, file_name, folder_id):
+    service = buat_koneksi_drive()
     if not service: return False
 
     try:
-        file_metadata = {
-            'name': file_name,
-            'parents': [folder_id]
-        }
+        clean_folder_id = str(folder_id).strip().strip("'\"")
+        file_metadata = {'name': file_name, 'parents': [clean_folder_id]}
         media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         
-        service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
+        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         return True
     except Exception as e:
-        st.error(f"Gagal upload file ke Google Drive: {e}")
+        st.error(f"Gagal mengunggah file ke Google Drive: {e}")
         return False
 
-def sync_data_from_gdrive(folder_id):
-    """Membaca seluruh file Excel di Google Drive sebagai sumber database utama"""
-    service = get_drive_service()
+def sinkronkan_data_dari_drive(folder_id):
+    service = buat_koneksi_drive()
     if not service: return 0
 
     try:
-        query = f"'{folder_id}' in parents and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false"
+        clean_folder_id = str(folder_id).strip().strip("'\"")
+        query = f"'{clean_folder_id}' in parents and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false"
         results = service.files().list(q=query, fields="files(id, name)").execute()
         files = results.get('files', [])
 
-        if not files:
-            return 0
+        if not files: return 0
 
-        # Reset session state sebelum reload data dari Drive
-        st.session_state.monthly_data = {m: {} for m in MONTHS}
-        count = 0
+        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+        jumlah_sheet = 0
 
         for file in files:
             request = service.files().get_media(fileId=file['id'])
@@ -353,32 +340,32 @@ def sync_data_from_gdrive(folder_id):
 
             for sheet_name in excel.sheet_names:
                 df_sheet = pd.read_excel(file_stream, sheet_name=sheet_name, header=None)
-                parsed = parse_d52b_sheet(df_sheet, sheet_name)
+                parsed = baca_sheet_d52b(df_sheet, sheet_name)
 
-                m = parsed.get("month") or detect_month_from_text(sheet_name)
+                m = parsed.get("month") or deteksi_bulan_dari_teks(sheet_name)
                 if m:
                     for ng, total in parsed.get("total_data", {}).items():
                         if ng not in st.session_state.monthly_data[m]:
                             st.session_state.monthly_data[m][ng] = 0
                         st.session_state.monthly_data[m][ng] += total
-                    count += 1
+                    jumlah_sheet += 1
 
-        return count
+        return jumlah_sheet
     except Exception as e:
         st.error(f"Error membaca dari Google Drive: {e}")
         return 0
 
 # ============================================================
-# SESSION STATE INITIALIZATION
+# INISIALISASI SESSION STATE
 # ============================================================
 
 if "monthly_data" not in st.session_state:
-    st.session_state.monthly_data = {m: {} for m in MONTHS}
+    st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
 
-DEFAULT_FOLDER_ID = st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJKG3jX3U")
+DEFAULT_FOLDER_ID = str(st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJKG3jX3U")).strip()
 
-def build_month_dataframe(month):
-    data = st.session_state.monthly_data.get(month, {})
+def buat_dataframe_bulan(bulan):
+    data = st.session_state.monthly_data.get(bulan, {})
     if not data: return pd.DataFrame(columns=["NG", "Jumlah", "Persentase", "Kumulatif"])
 
     df = pd.DataFrame(list(data.items()), columns=["NG", "Jumlah"])
@@ -392,18 +379,18 @@ def build_month_dataframe(month):
     df["Kumulatif"] = df["Persentase"].cumsum()
     return df
 
-def build_overall_dataframe():
-    rows = []
-    for m in MONTHS:
+def buat_dataframe_keseluruhan():
+    baris = []
+    for m in BULAN_LIST:
         for ng_name, jmh in st.session_state.monthly_data.get(m, {}).items():
-            if jmh > 0: rows.append({"Bulan": m, "NG": ng_name, "Jumlah": jmh})
-    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
+            if jmh > 0: baris.append({"Bulan": m, "NG": ng_name, "Jumlah": jmh})
+    return pd.DataFrame(baris) if baris else pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
 
 # ============================================================
-# RESPONSIVE PLOTLY CHARTS
+# GRAFIK PLOTLY RESPONTIF
 # ============================================================
 
-DARK_THEME_LAYOUT = dict(
+TEMA_GELAP = dict(
     paper_bgcolor='rgba(0,0,0,0)',
     plot_bgcolor='rgba(0,0,0,0)',
     font=dict(family="Inter, sans-serif", color="#94a3b8"),
@@ -412,7 +399,7 @@ DARK_THEME_LAYOUT = dict(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
 
-def create_pareto_chart(df, title):
+def buat_grafik_pareto(df, judul):
     if df.empty: return None
     data = df.sort_values("Jumlah", ascending=False).reset_index(drop=True)
 
@@ -435,198 +422,197 @@ def create_pareto_chart(df, title):
     fig.add_hline(y=80, line_dash="dash", line_color="#ef4444", secondary_y=True)
 
     fig.update_layout(
-        title=dict(text=title, font=dict(color="#f8fafc", size=14)),
+        title=dict(text=judul, font=dict(color="#f8fafc", size=14)),
         xaxis=dict(tickangle=-45, gridcolor="#1e293b", showgrid=False),
         yaxis=dict(title="Jumlah NG", gridcolor="#1e293b", showgrid=True),
         yaxis2=dict(title="Kumulatif (%)", range=[0, 105], showgrid=False),
-        **DARK_THEME_LAYOUT
+        **TEMA_GELAP
     )
     return fig
 
-def create_monthly_trend_chart(df):
+def buat_grafik_tren_bulanan(df):
     if df.empty: return None
-    monthly_sum = df.groupby("Bulan")["Jumlah"].sum().reindex(MONTHS).fillna(0).reset_index()
+    monthly_sum = df.groupby("Bulan")["Jumlah"].sum().reindex(BULAN_LIST).fillna(0).reset_index()
     monthly_sum = monthly_sum[monthly_sum["Jumlah"] > 0]
 
     if monthly_sum.empty: return None
 
     max_val = monthly_sum["Jumlah"].max()
-    colors = ["#ef4444" if v == max_val else "#3b82f6" for v in monthly_sum["Jumlah"]]
+    warna = ["#ef4444" if v == max_val else "#3b82f6" for v in monthly_sum["Jumlah"]]
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=monthly_sum["Bulan"], y=monthly_sum["Jumlah"],
         text=monthly_sum["Jumlah"], textposition="outside",
-        marker_color=colors, textfont=dict(color="#f8fafc")
+        marker_color=warna, textfont=dict(color="#f8fafc")
     ))
 
     fig.update_layout(
-        title=dict(text="Total Defect Volume per Month (Highest Highlighted)", font=dict(color="#f8fafc", size=14)),
+        title=dict(text="Total Defect per Bulan (Tertinggi Diberi Highlight Merah)", font=dict(color="#f8fafc", size=14)),
         xaxis=dict(gridcolor="#1e293b", showgrid=False),
-        yaxis=dict(title="Defect Count", gridcolor="#1e293b", showgrid=True),
+        yaxis=dict(title="Jumlah Defect", gridcolor="#1e293b", showgrid=True),
         height=350,
-        **DARK_THEME_LAYOUT
+        **TEMA_GELAP
     )
     return fig
 
 # ============================================================
-# SIDEBAR NAVIGATION
+# NAVIGASI SIDEBAR
 # ============================================================
 
 with st.sidebar:
-    st.markdown("### ⚡ D52B Quality Hub")
-    st.caption("Sewing Assembly Dashboard")
+    st.markdown("### ⚡ Quality Hub D52B")
+    st.caption("Dashboard Sewing Assembly")
     st.markdown("---")
 
-    page = st.radio(
+    halaman = st.radio(
         "MENU NAVIGASI",
         [
-            "Dashboard Overview",
+            "Ringkasan Dashboard",
             "Pareto Bulanan",
-            "Data Grid Editor",
-            "Upload / Sync Data",
-            "Export Reports"
+            "Editor Data",
+            "Upload / Sinkronisasi Data",
+            "Ekspor Laporan"
         ]
     )
 
     st.markdown("---")
-    st.caption("Database Storage: **Google Drive Folder**")
+    st.caption("Penyimpanan Database: **Google Drive Folder**")
 
 # ============================================================
-# PAGE 1: DASHBOARD OVERVIEW
+# HALAMAN 1: RINGKASAN DASHBOARD
 # ============================================================
 
-if page == "Dashboard Overview":
-    st.title("Quality Executive Summary")
-    st.caption("Real-time Defect Analytics Driven by Google Drive Storage")
+if halaman == "Ringkasan Dashboard":
+    st.title("Ringkasan Eksekutif Kualitas")
+    st.caption("Analisis Defect Real-Time Berbasis Folder Google Drive")
 
-    all_data = build_overall_dataframe()
+    semua_data = buat_dataframe_keseluruhan()
+    total_ng_semua = semua_data["Jumlah"].sum() if not semua_data.empty else 0
 
-    total_ng_all = all_data["Jumlah"].sum() if not all_data.empty else 0
-
-    if not all_data.empty:
-        monthly_grp = all_data.groupby("Bulan")["Jumlah"].sum()
-        highest_month = monthly_grp.idxmax() if not monthly_grp.empty else "-"
-        highest_month_val = monthly_grp.max() if not monthly_grp.empty else 0
-        top_ng_overall = all_data.groupby("NG")["Jumlah"].sum().idxmax()
+    if not semua_data.empty:
+        grp_bulan = semua_data.groupby("Bulan")["Jumlah"].sum()
+        bulan_tertinggi = grp_bulan.idxmax() if not grp_bulan.empty else "-"
+        val_tertinggi = grp_bulan.max() if not grp_bulan.empty else 0
+        top_ng_semua = semua_data.groupby("NG")["Jumlah"].sum().idxmax()
     else:
-        highest_month, highest_month_val, top_ng_overall = "-", 0, "-"
+        bulan_tertinggi, val_tertinggi, top_ng_semua = "-", 0, "-"
 
     col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("Total Defect Volume", format_int(total_ng_all))
-    with col2: st.metric("Peak Defect Month", f"{highest_month}", f"{format_int(highest_month_val)} NG")
-    with col3: st.metric("Primary Defect Type", top_ng_overall)
+    with col1: st.metric("Total Volume Defect", format_angka(total_ng_semua))
+    with col2: st.metric("Bulan Defect Tertinggi", f"{bulan_tertinggi}", f"{format_angka(val_tertinggi)} NG")
+    with col3: st.metric("Jenis Defect Utama", top_ng_semua)
     with col4:
-        active_months = len(all_data["Bulan"].unique()) if not all_data.empty else 0
-        st.metric("Recorded Months", f"{active_months} Months")
+        bulan_aktif = len(semua_data["Bulan"].unique()) if not semua_data.empty else 0
+        st.metric("Total Bulan Terrekam", f"{bulan_aktif} Bulan")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.subheader("Monthly Defect Comparison")
-    if not all_data.empty:
-        fig_trend = create_monthly_trend_chart(all_data)
+    st.subheader("Perbandingan Defect Antar Bulan")
+    if not semua_data.empty:
+        fig_trend = buat_grafik_tren_bulanan(semua_data)
         if fig_trend: st.plotly_chart(fig_trend, use_container_width=True)
     else:
-        st.info("Belum ada data. Silakan sync dari Google Drive di menu 'Upload / Sync Data'.")
+        st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
 
     st.markdown("---")
     c1, c2 = st.columns([2, 1])
-    with c1: st.subheader("Defect Pareto Breakdown")
-    with c2: scope = st.selectbox("Filter Period", ["All Months"] + MONTHS)
+    with c1: st.subheader("Analisis Pareto Defect")
+    with c2: periode = st.selectbox("Filter Periode", ["Semua Bulan"] + BULAN_LIST)
 
-    if scope == "All Months":
-        scope_df = all_data.groupby("NG")["Jumlah"].sum().reset_index() if not all_data.empty else pd.DataFrame()
+    if periode == "Semua Bulan":
+        df_periode = semua_data.groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
     else:
-        scope_df = all_data[all_data["Bulan"] == scope].groupby("NG")["Jumlah"].sum().reset_index() if not all_data.empty else pd.DataFrame()
+        df_periode = semua_data[semua_data["Bulan"] == periode].groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
 
-    if not scope_df.empty and scope_df["Jumlah"].sum() > 0:
-        total_scope = scope_df["Jumlah"].sum()
-        scope_df["Persentase"] = (scope_df["Jumlah"] / total_scope * 100)
-        scope_df = scope_df.sort_values("Jumlah", ascending=False).reset_index(drop=True)
-        scope_df["Kumulatif"] = scope_df["Persentase"].cumsum()
+    if not df_periode.empty and df_periode["Jumlah"].sum() > 0:
+        total_p = df_periode["Jumlah"].sum()
+        df_periode["Persentase"] = (df_periode["Jumlah"] / total_p * 100)
+        df_periode = df_periode.sort_values("Jumlah", ascending=False).reset_index(drop=True)
+        df_periode["Kumulatif"] = df_periode["Persentase"].cumsum()
 
-        fig_pareto = create_pareto_chart(scope_df, f"Pareto Analysis — {scope}")
+        fig_pareto = buat_grafik_pareto(df_periode, f"Analisis Pareto — {periode}")
         st.plotly_chart(fig_pareto, use_container_width=True)
     else:
-        st.warning(f"No records found for period: {scope}")
+        st.warning(f"Tidak ada data ditemukan untuk periode: {periode}")
 
 # ============================================================
-# PAGE 2: PARETO BULANAN
+# HALAMAN 2: PARETO BULANAN
 # ============================================================
 
-elif page == "Pareto Bulanan":
-    st.title("Monthly Pareto Analytics")
+elif halaman == "Pareto Bulanan":
+    st.title("Analisis Pareto Bulanan")
 
-    selected_month = st.selectbox("Select Target Month", MONTHS, index=0)
-    df_month = build_month_dataframe(selected_month)
+    bulan_pilihan = st.selectbox("Pilih Bulan Target", BULAN_LIST, index=0)
+    df_bulan = buat_dataframe_bulan(bulan_pilihan)
 
-    if df_month.empty:
-        st.warning(f"No dataset loaded for **{selected_month}**.")
+    if df_bulan.empty:
+        st.warning(f"Belum ada data yang dimuat untuk bulan **{bulan_pilihan}**.")
     else:
-        total_ng = df_month["Jumlah"].sum()
+        total_ng = df_bulan["Jumlah"].sum()
         col1, col2, col3 = st.columns(3)
-        with col1: st.metric("Total Monthly Defect", format_int(total_ng))
-        with col2: st.metric("Top Defect Category", df_month.iloc[0]["NG"])
-        with col3: st.metric("Top Category Count", format_int(df_month.iloc[0]["Jumlah"]))
+        with col1: st.metric("Total Defect Bulanan", format_angka(total_ng))
+        with col2: st.metric("Kategori Defect Tertinggi", df_bulan.iloc[0]["NG"])
+        with col3: st.metric("Jumlah Defect Tertinggi", format_angka(df_bulan.iloc[0]["Jumlah"]))
 
-        fig = create_pareto_chart(df_month, f"Pareto Distribution — {selected_month}")
+        fig = buat_grafik_pareto(df_bulan, f"Distribus Pareto — {bulan_pilihan}")
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader(f"Detailed Defect Table — {selected_month}")
-        display_df = df_month.copy()
+        st.subheader(f"Tabel Rincian Defect — {bulan_pilihan}")
+        display_df = df_bulan.copy()
         display_df["Persentase"] = display_df["Persentase"].round(2).astype(str) + " %"
         display_df["Kumulatif"] = display_df["Kumulatif"].round(2).astype(str) + " %"
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 # ============================================================
-# PAGE 3: DATA GRID EDITOR
+# HALAMAN 3: EDITOR DATA
 # ============================================================
 
-elif page == "Data Grid Editor":
-    st.title("Manual Data Review")
-    st.caption("Review active session defect numbers")
+elif halaman == "Editor Data":
+    st.title("Tinjauan Data Manual")
+    st.caption("Penyesuaian jumlah defect sesi aktif")
 
-    edit_month = st.selectbox("Select Month to Review", MONTHS)
-    current_data = st.session_state.monthly_data.get(edit_month, {})
+    bulan_edit = st.selectbox("Pilih Bulan yang Ingin Ditinjau", BULAN_LIST)
+    data_saat_ini = st.session_state.monthly_data.get(bulan_edit, {})
 
-    rows = [{"Defect Category": ng, "Quantity": current_data.get(ng, 0)} for ng in NG_TYPES]
-    df_edit = pd.DataFrame(rows)
+    baris_editor = [{"Kategori Defect": ng, "Jumlah": data_saat_ini.get(ng, 0)} for ng in JENIS_NG]
+    df_editor = pd.DataFrame(baris_editor)
 
     edited_df = st.data_editor(
-        df_edit,
+        df_editor,
         use_container_width=True,
         hide_index=True,
-        column_config={"Quantity": st.column_config.NumberColumn(min_value=0, step=1)}
+        column_config={"Jumlah": st.column_config.NumberColumn(min_value=0, step=1)}
     )
 
-    if st.button("Update Session Data"):
-        new_data = {}
+    if st.button("Simpan Data Sesi"):
+        data_baru = {}
         for _, r in edited_df.iterrows():
-            qty = clean_number(r["Quantity"])
-            if qty > 0: new_data[str(r["Defect Category"])] = qty
+            qty = bersihkan_angka(r["Jumlah"])
+            if qty > 0: data_baru[str(r["Kategori Defect"])] = qty
 
-        st.session_state.monthly_data[edit_month] = new_data
-        st.success(f"Session data updated for {edit_month}.")
+        st.session_state.monthly_data[bulan_edit] = data_baru
+        st.success(f"Data sesi berhasil diperbarui untuk bulan {bulan_edit}.")
 
 # ============================================================
-# PAGE 4: HYBRID IMPORT (AUTO DRIVE SYNC & DIRECT UPLOAD)
+# HALAMAN 4: UPLOAD & SINKRONISASI DATA
 # ============================================================
 
-elif page == "Upload / Sync Data":
-    st.title("Data Import & Google Drive Sync")
+elif halaman == "Upload / Sinkronisasi Data":
+    st.title("Impor Data & Sinkronisasi")
     st.caption("Seluruh file Excel yang di-upload akan tersimpan otomatis ke Folder Google Drive.")
 
-    tab1, tab2 = st.tabs(["📁 Sync dari Google Drive", "📤 Upload File ke Google Drive"])
+    tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
 
     with tab1:
-        st.subheader("Baca Folder Google Drive")
+        st.subheader("Baca Otomatis Folder Google Drive")
         st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
         
-        folder_input = st.text_input("Google Drive Folder ID", value=DEFAULT_FOLDER_ID)
+        folder_input = st.text_input("ID Folder Google Drive", value=DEFAULT_FOLDER_ID)
 
         if st.button("🔄 Sync Data dari Google Drive", type="primary"):
             with st.spinner("Membaca dan memproses file dari Google Drive..."):
-                synced_count = sync_data_from_gdrive(folder_input)
+                synced_count = sinkronkan_data_dari_drive(folder_input)
                 if synced_count > 0:
                     st.success(f"Berhasil membaca {synced_count} sheet data dari Google Drive!")
                 else:
@@ -642,35 +628,33 @@ elif page == "Upload / Sync Data":
                     file_bytes = uploaded_file.getvalue()
                     file_name = uploaded_file.name
 
-                    # 1. Upload file fisik langsung ke Google Drive
-                    if upload_file_to_gdrive(file_bytes, file_name, DEFAULT_FOLDER_ID):
-                        st.success(f"File **{file_name}** berhasil disimpan di Google Drive!")
+                    if unggah_file_ke_drive(file_bytes, file_name, folder_input):
+                        st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
                         
-                        # 2. Re-sync data dari Google Drive
-                        synced = sync_data_from_gdrive(DEFAULT_FOLDER_ID)
+                        synced = sinkronkan_data_dari_drive(folder_input)
                         st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} sheet terproses)")
 
 # ============================================================
-# PAGE 5: EXPORT REPORTS
+# HALAMAN 5: EKSPOR LAPORAN
 # ============================================================
 
-elif page == "Export Reports":
-    st.title("Export & Data Management")
+elif halaman == "Ekspor Laporan":
+    st.title("Ekspor & Manajemen Data")
 
-    overall = build_overall_dataframe()
+    semua_rekap = buat_dataframe_keseluruhan()
 
-    if overall.empty:
-        st.info("No current data available for export.")
+    if semua_rekap.empty:
+        st.info("Belum ada data yang tersedia untuk diekspor.")
     else:
-        st.dataframe(overall, use_container_width=True, hide_index=True)
+        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)
 
         buffer = BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            overall.to_excel(writer, sheet_name="Defect Summary", index=False)
+            semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
 
         st.download_button(
-            "Download Excel Report",
+            "Unduh Laporan Excel",
             data=buffer.getvalue(),
-            file_name="D52B_Quality_Report.xlsx",
+            file_name="Laporan_Kualitas_D52B.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )

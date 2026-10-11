@@ -496,6 +496,11 @@ def buat_grafik_tren_top3_bulanan():
     )
 
     fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family="Inter, sans-serif", color="#94a3b8"),
+        margin=dict(l=10, r=10, t=60, b=40),
+        autosize=True,
         xaxis=dict(title="", gridcolor="#1e293b", showgrid=False),
         yaxis=dict(title="Jumlah Defect (Pcs)", gridcolor="#1e293b", showgrid=True),
         legend=dict(
@@ -509,9 +514,9 @@ def buat_grafik_tren_top3_bulanan():
         bargap=0.2,
         bargroupgap=0.08,
         height=450,
-        **TEMA_GELAP
     )
     return fig
+
 
 # ============================================================
 # NAVIGASI SIDEBAR

@@ -464,23 +464,51 @@ def buat_grafik_tren_top3_bulanan():
     df_top3_concat = pd.concat(top3_per_bulan)
     jenis_ng_top3 = df_top3_concat["NG"].unique()
 
-    # Ambil tren pergerakan untuk semua jenis NG yang pernah masuk Top 3
+    # Ambil data jenis NG yang pernah masuk Top 3
     df_filtered = semua_df[semua_df["NG"].isin(jenis_ng_top3)].copy()
 
-    fig = px.line(
+    # Palette warna kontras dan profesional
+    skema_warna = {
+        "Benang over/ Keluar": "#3b82f6",       # Biru
+        "Benang kendor (Machine)": "#f59e0b",   # Amber / Kuning
+        "Jarak jahitan tidak standar": "#ef4444", # Merah
+        "Benang Pecah": "#8b5cf6",               # Ungu
+        "Cacat bahan": "#10b981"                 # Hijau
+    }
+
+    # Buat Grouped Bar Chart yang rapi dan mudah dibaca
+    fig = px.bar(
         df_filtered,
         x="Bulan",
         y="Jumlah",
         color="NG",
-        markers=True,
+        barmode="group",
+        text_auto=True,
         category_orders={"Bulan": BULAN_LIST[:9]},
-        title="<b>Tren Pergerakan Defect Top 3 per Bulan (Januari – September)</b>"
+        color_discrete_map=skema_warna,
+        title="<b>Perbandingan Volume Defect Top 3 per Bulan (Jan–Sep)</b>"
+    )
+
+    fig.update_traces(
+        textposition="outside",
+        textfont=dict(size=11, color="#f8fafc"),
+        cliponaxis=False
     )
 
     fig.update_layout(
-        xaxis=dict(title="Bulan", gridcolor="#1e293b", showgrid=False),
+        xaxis=dict(title="", gridcolor="#1e293b", showgrid=False),
         yaxis=dict(title="Jumlah Defect (Pcs)", gridcolor="#1e293b", showgrid=True),
-        height=420,
+        legend=dict(
+            title="<b>Jenis Defect Utama:</b>",
+            orientation="h",
+            yanchor="bottom",
+            y=1.05,
+            xanchor="left",
+            x=0
+        ),
+        bargap=0.2,
+        bargroupgap=0.08,
+        height=450,
         **TEMA_GELAP
     )
     return fig

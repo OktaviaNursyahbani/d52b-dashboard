@@ -331,31 +331,43 @@ def sinkronkan_data_dari_drive(folder_id):
 
         if not files: return 0
 
-        # Reset session state awal
+        # Reset data sesi awal
         st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-        jumlah_sheet = 0
+        jumlah_file = 0
 
         for file in files:
             file_name = file.get('name', '')
+            bulan_file = deteksi_bulan_dari_teks(file_name)
+
             request = service.files().get_media(fileId=file['id'])
             file_stream = BytesIO(request.execute())
             excel = pd.ExcelFile(file_stream)
 
-            for sheet_name in excel.sheet_names:
-                df_sheet = pd.read_excel(file_stream, sheet_name=sheet_name, header=None)
-                parsed = baca_sheet_d52b(df_sheet, sheet_name)
+            # PRIORITAS HANYA BACA SHEET SUMMARY D52B (Mencegah Double Counting)
+            target_sheet = None
+            for s in excel.sheet_names:
+                if "SUMMARY" in s.upper() or "REKAP" in s.upper():
+                    target_sheet = s
+                    break
+            
+            if not target_sheet and len(excel.sheet_names) > 0:
+                target_sheet = excel.sheet_names[0]
 
-                # Deteksi bulan dari hasil ekstraksi, nama sheet, atau nama file
-                m = parsed.get("month") or deteksi_bulan_dari_teks(sheet_name) or deteksi_bulan_dari_teks(file_name)
+            if target_sheet:
+                df_sheet = pd.read_excel(file_stream, sheet_name=target_sheet, header=None)
+                parsed = baca_sheet_d52b(df_sheet, target_sheet)
+
+                # Prioritas bulan dari nama file atau isi sheet
+                m = bulan_file or parsed.get("month") or deteksi_bulan_dari_teks(target_sheet)
 
                 if m:
                     for ng, total in parsed.get("total_data", {}).items():
                         if ng not in st.session_state.monthly_data[m]:
                             st.session_state.monthly_data[m][ng] = 0
                         st.session_state.monthly_data[m][ng] += total
-                    jumlah_sheet += 1
+                    jumlah_file += 1
 
-        return jumlah_sheet
+        return jumlah_file
     except Exception as e:
         st.error(f"Error membaca dari Google Drive: {e}")
         return 0
@@ -619,7 +631,7 @@ elif halaman == "Upload / Sinkronisasi Data":
             with st.spinner("Membaca dan memproses file dari Google Drive..."):
                 synced_count = sinkronkan_data_dari_drive(folder_input)
                 if synced_count > 0:
-                    st.success(f"Berhasil membaca {synced_count} sheet data dari Google Drive!")
+                    st.success(f"Berhasil membaca {synced_count} file rekap dari Google Drive!")
                 else:
                     st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
 
@@ -637,7 +649,7 @@ elif halaman == "Upload / Sinkronisasi Data":
                         st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
                         
                         synced = sinkronkan_data_dari_drive(folder_input)
-                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} sheet terproses)")
+                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} file terproses)")
 
     st.markdown("---")
     st.subheader("🗑️ Bersihkan Data Sesi")

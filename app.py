@@ -660,6 +660,8 @@ def buat_laporan_pdf():
     sec_style = ParagraphStyle('SecStyle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0f172a'), spaceBefore=10, spaceAfter=8)
 
     elements = []
+    
+    # Header & Metrik Utama
     elements.append(Paragraph("LAPORAN PUSAT KONTROL KUALITAS D52B", title_style))
     elements.append(Paragraph("Ringkasan Eksekutif Defect Sewing Assembly & Analisis Pareto", sub_style))
 
@@ -691,16 +693,32 @@ def buat_laporan_pdf():
     elements.append(t_metric)
     elements.append(Spacer(1, 15))
 
+    # 1. Grafik Tren Bulanan
     elements.append(Paragraph("1. Grafik Perbandingan Defect Antar Bulan", sec_style))
     img_buf_trend = buat_gambar_grafik_tren_pdf(semua_data)
     if img_buf_trend:
         elements.append(Image(img_buf_trend, width=520, height=220))
     elements.append(Spacer(1, 15))
 
+    # 2. Grafik Pareto Keseluruhan
     elements.append(Paragraph("2. Grafik Analisis Pareto Defect Keseluruhan", sec_style))
-    img_buf_pareto = buat_gambar_grafik_pareto_pdf(semua_data, "Analisis Pareto Defect (Semua Bulan)")
-    if img_buf_pareto:
-        elements.append(Image(img_buf_pareto, width=520, height=250))
+    img_buf_pareto_all = buat_gambar_grafik_pareto_pdf(semua_data, "Analisis Pareto Defect (Semua Bulan)")
+    if img_buf_pareto_all:
+        elements.append(Image(img_buf_pareto_all, width=520, height=240))
+    elements.append(Spacer(1, 15))
+
+    # 3. Analisis Pareto Per Bulan
+    elements.append(Paragraph("3. Analisis Pareto Defect Per Bulan", sec_style))
+    
+    for m in BULAN_LIST:
+        df_m = semua_data[semua_data["Bulan"] == m]
+        if not df_m.empty and df_m["Jumlah"].sum() > 0:
+            img_buf_m = buat_gambar_grafik_pareto_pdf(df_m, f"Analisis Pareto Defect — Bulan {m}")
+            if img_buf_m:
+                elements.append(Paragraph(f"<b>• Pareto Defect Bulan {m} (Total: {int(df_m['Jumlah'].sum()):,} Pcs)</b>".replace(",", "."), styles['Normal']))
+                elements.append(Spacer(1, 4))
+                elements.append(Image(img_buf_m, width=500, height=220))
+                elements.append(Spacer(1, 12))
 
     doc.build(elements)
     buffer.seek(0)
@@ -917,7 +935,7 @@ elif halaman == "Upload / Sinkronisasi Data":
 
 elif halaman == "Ekspor Laporan":
     st.title("Ekspor & Manajemen Data Laporan")
-    st.caption("Unduh laporan dalam format file Spreadsheet (Excel) atau Dokumen Ringkasan PDF (Grafik).")
+    st.caption("Unduh laporan dalam format file Spreadsheet (Excel) atau Dokumen Ringkasan PDF (Grafik All & Per Bulan).")
 
     semua_rekap = buat_dataframe_keseluruhan()
 
@@ -927,15 +945,15 @@ elif halaman == "Ekspor Laporan":
         col_pdf, col_excel = st.columns(2)
 
         with col_pdf:
-            st.subheader("📄 Laporan PDF (Grafik Dashboard)")
-            st.caption("Mencakup ringkasan metrik utama, grafik perbandingan bulanan, dan grafik Pareto NG.")
+            st.subheader("📄 Laporan PDF (Grafik All & Pareto Per Bulan)")
+            st.caption("Mencakup ringkasan metrik utama, grafik perbandingan bulanan, grafik Pareto All, dan Pareto per bulan.")
             if HAS_REPORTLAB and HAS_MATPLOTLIB:
                 pdf_data = buat_laporan_pdf()
                 if pdf_data:
                     st.download_button(
-                        label="📄 Unduh Laporan PDF Dashboard",
+                        label="📄 Unduh Laporan PDF Dashboard (Lengkap)",
                         data=pdf_data.getvalue(),
-                        file_name="Laporan_Kualitas_D52B_Dashboard.pdf",
+                        file_name="Laporan_Kualitas_D52B_Lengkap.pdf",
                         mime="application/pdf",
                         type="primary"
                     )

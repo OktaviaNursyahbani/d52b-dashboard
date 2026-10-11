@@ -6,18 +6,28 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from io import BytesIO
 import re
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+# Import opsional untuk ekspor PDF
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    HAS_REPORTLAB = True
+except ImportError:
+    HAS_REPORTLAB = False
 
 # ============================================================
 # KONFIGURASI HALAMAN
@@ -558,11 +568,11 @@ def buat_grafik_top3_bulanan():
     return fig
 
 # ============================================================
-# FUNGSI EXPORT LAPORAN PDF DENGAN GRAFIK DEDIKASI
+# FUNGSI EXPORT LAPORAN PDF
 # ============================================================
 
 def buat_gambar_grafik_tren_pdf(df):
-    if df.empty: return None
+    if not HAS_MATPLOTLIB or df.empty: return None
     monthly_sum = df.groupby("Bulan")["Jumlah"].sum().reindex(BULAN_LIST).fillna(0).reset_index()
     monthly_sum = monthly_sum[monthly_sum["Jumlah"] > 0]
     if monthly_sum.empty: return None
@@ -596,7 +606,7 @@ def buat_gambar_grafik_tren_pdf(df):
     return buf
 
 def buat_gambar_grafik_pareto_pdf(df, judul="Analisis Pareto Defect"):
-    if df.empty: return None
+    if not HAS_MATPLOTLIB or df.empty: return None
     data = df.groupby("NG")["Jumlah"].sum().reset_index()
     if data.empty or data["Jumlah"].sum() == 0: return None
 
@@ -635,6 +645,7 @@ def buat_gambar_grafik_pareto_pdf(df, judul="Analisis Pareto Defect"):
     return buf
 
 def buat_laporan_pdf():
+    if not HAS_REPORTLAB or not HAS_MATPLOTLIB: return None
     semua_data = buat_dataframe_keseluruhan()
     if semua_data.empty: return None
 
@@ -652,7 +663,6 @@ def buat_laporan_pdf():
     elements.append(Paragraph("LAPORAN PUSAT KONTROL KUALITAS D52B", title_style))
     elements.append(Paragraph("Ringkasan Eksekutif Defect Sewing Assembly & Analisis Pareto", sub_style))
 
-    # Metric Table Summary
     total_defect = semua_data["Jumlah"].sum()
     grp_bulan = semua_data.groupby("Bulan")["Jumlah"].sum()
     bulan_top = grp_bulan.idxmax() if not grp_bulan.empty else "-"
@@ -681,14 +691,12 @@ def buat_laporan_pdf():
     elements.append(t_metric)
     elements.append(Spacer(1, 15))
 
-    # Grafik 1: Perbandingan Defect Antar Bulan
     elements.append(Paragraph("1. Grafik Perbandingan Defect Antar Bulan", sec_style))
     img_buf_trend = buat_gambar_grafik_tren_pdf(semua_data)
     if img_buf_trend:
         elements.append(Image(img_buf_trend, width=520, height=220))
     elements.append(Spacer(1, 15))
 
-    # Grafik 2: Analisis Pareto Defect Keseluruhan
     elements.append(Paragraph("2. Grafik Analisis Pareto Defect Keseluruhan", sec_style))
     img_buf_pareto = buat_gambar_grafik_pareto_pdf(semua_data, "Analisis Pareto Defect (Semua Bulan)")
     if img_buf_pareto:
@@ -704,3 +712,250 @@ def buat_laporan_pdf():
 
 with st.sidebar:
     st.markdown("### D52B Quality Hub")
+    st.caption("Dashboard Sewing Assembly")
+    st.markdown("---")
+
+    halaman = st.radio(
+        "MENU NAVIGASI",
+        [
+            "Ringkasan Dashboard",
+            "Pareto Bulanan",
+            "Editor Data",
+            "Upload / Sinkronisasi Data",
+            "Ekspor Laporan"
+        ]
+    )
+
+    st.markdown("---")
+    st.caption("Penyimpanan Database: **Google Drive Folder**")
+
+# ============================================================
+# HALAMAN 1: RINGKASAN DASHBOARD
+# ============================================================
+
+if halaman == "Ringkasan Dashboard":
+    st.title("Ringkasan Eksekutif Kualitas")
+    st.caption("Analisis Defect Real-Time Berbasis Folder Google Drive")
+
+    semua_data = buat_dataframe_keseluruhan()
+    total_ng_semua = semua_data["Jumlah"].sum() if not semua_data.empty else 0
+
+    if not semua_data.empty:
+        grp_bulan = semua_data.groupby("Bulan")["Jumlah"].sum()
+        bulan_tertinggi = grp_bulan.idxmax() if not grp_bulan.empty else "-"
+        val_tertinggi = grp_bulan.max() if not grp_bulan.empty else 0
+        top_ng_semua = semua_data.groupby("NG")["Jumlah"].sum().idxmax()
+    else:
+        bulan_tertinggi, val_tertinggi, top_ng_semua = "-", 0, "-"
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("Total Volume Defect", format_angka(total_ng_semua))
+    with col2: st.metric("Bulan Defect Tertinggi", f"{bulan_tertinggi}", f"{format_angka(val_tertinggi)} NG")
+    with col3: st.metric("Jenis Defect Utama", top_ng_semua)
+    with col4:
+        bulan_aktif = len(semua_data["Bulan"].unique()) if not semua_data.empty else 0
+        st.metric("Total Bulan Terrekam", f"{bulan_aktif} Bulan")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.subheader("Perbandingan Defect Antar Bulan")
+    if not semua_data.empty:
+        fig_trend = buat_grafik_tren_bulanan(semua_data)
+        if fig_trend: st.plotly_chart(fig_trend, use_container_width=True)
+    else:
+        st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
+
+    st.markdown("---")
+    st.subheader("Top 3 Defect per Bulan")
+    st.caption("Tepat 3 jenis defect teratas di setiap bulan. Arahkan kursor ke bar untuk melihat nama lengkap.")
+
+    if not semua_data.empty:
+        fig_top3 = buat_grafik_top3_bulanan()
+        if fig_top3:
+            st.plotly_chart(fig_top3, use_container_width=True)
+
+        df_tabel_top3 = buat_tabel_top3_bulanan()
+        if not df_tabel_top3.empty:
+            with st.expander("Lihat Tabel Ringkasan Top 3 per Bulan"):
+                st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
+        else:
+            st.info("Data belum cukup untuk menampilkan Top 3.")
+    else:
+        st.info("Sinkronkan data terlebih dahulu untuk melihat grafik tren Top 3.")
+
+    st.markdown("---")
+    c1, c2 = st.columns([2, 1])
+    with c1: st.subheader("Analisis Pareto Defect")
+    with c2: periode = st.selectbox("Filter Periode", ["Semua Bulan"] + BULAN_LIST)
+
+    if periode == "Semua Bulan":
+        df_periode = semua_data.groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
+    else:
+        df_periode = semua_data[semua_data["Bulan"] == periode].groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
+
+    if not df_periode.empty and df_periode["Jumlah"].sum() > 0:
+        total_p = df_periode["Jumlah"].sum()
+        df_periode["Persentase"] = (df_periode["Jumlah"] / total_p * 100)
+        df_periode = df_periode.sort_values("Jumlah", ascending=False).reset_index(drop=True)
+        df_periode["Kumulatif"] = df_periode["Persentase"].cumsum()
+
+        fig_pareto = buat_grafik_pareto(df_periode, f"Analisis Pareto — {periode}")
+        st.plotly_chart(fig_pareto, use_container_width=True)
+    else:
+        st.warning(f"Tidak ada data ditemukan untuk periode: {periode}")
+
+# ============================================================
+# HALAMAN 2: PARETO BULANAN
+# ============================================================
+
+elif halaman == "Pareto Bulanan":
+    st.title("Analisis Pareto Bulanan")
+
+    bulan_pilihan = st.selectbox("Pilih Bulan Target", BULAN_LIST, index=0)
+    df_bulan = buat_dataframe_bulan(bulan_pilihan)
+
+    if df_bulan.empty:
+        st.warning(f"Belum ada data yang dimuat untuk bulan **{bulan_pilihan}**.")
+    else:
+        total_ng = df_bulan["Jumlah"].sum()
+        col1, col2, col3 = st.columns(3)
+        with col1: st.metric("Total Defect Bulanan", format_angka(total_ng))
+        with col2: st.metric("Kategori Defect Tertinggi", df_bulan.iloc[0]["NG"])
+        with col3: st.metric("Jumlah Defect Tertinggi", format_angka(df_bulan.iloc[0]["Jumlah"]))
+
+        fig = buat_grafik_pareto(df_bulan, f"Distribus Pareto — {bulan_pilihan}")
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.subheader(f"Tabel Rincian Defect — {bulan_pilihan}")
+        display_df = df_bulan.copy()
+        display_df["Persentase"] = display_df["Persentase"].round(2).astype(str) + " %"
+        display_df["Kumulatif"] = display_df["Kumulatif"].round(2).astype(str) + " %"
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+# ============================================================
+# HALAMAN 3: EDITOR DATA
+# ============================================================
+
+elif halaman == "Editor Data":
+    st.title("Tinjauan Data Manual")
+    st.caption("Penyesuaian jumlah defect sesi aktif")
+
+    bulan_edit = st.selectbox("Pilih Bulan yang Ingin Ditinjau", BULAN_LIST)
+    data_saat_ini = st.session_state.monthly_data.get(bulan_edit, {})
+
+    baris_editor = [{"Kategori Defect": ng, "Jumlah": data_saat_ini.get(ng, 0)} for ng in JENIS_NG]
+    df_editor = pd.DataFrame(baris_editor)
+
+    edited_df = st.data_editor(
+        df_editor,
+        use_container_width=True,
+        hide_index=True,
+        column_config={"Jumlah": st.column_config.NumberColumn(min_value=0, step=1)}
+    )
+
+    if st.button("Simpan Data Sesi"):
+        data_baru = {}
+        for _, r in edited_df.iterrows():
+            qty = bersihkan_angka(r["Jumlah"])
+            if qty > 0: data_baru[str(r["Kategori Defect"])] = qty
+
+        st.session_state.monthly_data[bulan_edit] = data_baru
+        st.success(f"Data sesi berhasil diperbarui untuk bulan {bulan_edit}.")
+
+# ============================================================
+# HALAMAN 4: UPLOAD & SINKRONISASI DATA
+# ============================================================
+
+elif halaman == "Upload / Sinkronisasi Data":
+    st.title("Impor Data & Sinkronisasi")
+    st.caption("Seluruh file Excel yang di-upload akan tersimpan otomatis ke Folder Google Drive.")
+
+    tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
+
+    with tab1:
+        st.subheader("Baca Otomatis Folder Google Drive")
+        st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
+        
+        folder_input = st.text_input("ID Folder Google Drive", value=DEFAULT_FOLDER_ID)
+
+        if st.button("🔄 Sync Data dari Google Drive", type="primary"):
+            with st.spinner("Membaca dan memproses file dari Google Drive..."):
+                synced_count = sinkronkan_data_dari_drive(folder_input)
+                if synced_count > 0:
+                    st.success(f"Berhasil membaca {synced_count} file rekap dari Google Drive!")
+                else:
+                    st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
+
+    with tab2:
+        st.subheader("Upload File Excel Langsung ke Google Drive")
+        uploaded_file = st.file_uploader("Pilih File Excel (.xlsx)", type=["xlsx", "xls"])
+
+        if uploaded_file is not None:
+            if st.button("🚀 Upload File & Sync Dashboard", type="primary"):
+                with st.spinner("Mengunggah file ke Google Drive..."):
+                    file_bytes = uploaded_file.getvalue()
+                    file_name = uploaded_file.name
+
+                    if unggah_file_ke_drive(file_bytes, file_name, folder_input):
+                        st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
+                        
+                        synced = sinkronkan_data_dari_drive(folder_input)
+                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} file terproses)")
+
+    st.markdown("---")
+    st.subheader("🗑️ Bersihkan Data Sesi")
+    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tampil di dashboard dan memulai dari awal.")
+
+    if st.button("🚨 Hapus / Clear Seluruh Data Dashboard"):
+        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+        st.success("Seluruh data dashboard berhasil dibersihkan!")
+        st.rerun()
+
+# ============================================================
+# HALAMAN 5: EKSPOR LAPORAN
+# ============================================================
+
+elif halaman == "Ekspor Laporan":
+    st.title("Ekspor & Manajemen Data Laporan")
+    st.caption("Unduh laporan dalam format file Spreadsheet (Excel) atau Dokumen Ringkasan PDF (Grafik).")
+
+    semua_rekap = buat_dataframe_keseluruhan()
+
+    if semua_rekap.empty:
+        st.info("Belum ada data yang tersedia untuk diekspor.")
+    else:
+        col_pdf, col_excel = st.columns(2)
+
+        with col_pdf:
+            st.subheader("📄 Laporan PDF (Grafik Dashboard)")
+            st.caption("Mencakup ringkasan metrik utama, grafik perbandingan bulanan, dan grafik Pareto NG.")
+            if HAS_REPORTLAB and HAS_MATPLOTLIB:
+                pdf_data = buat_laporan_pdf()
+                if pdf_data:
+                    st.download_button(
+                        label="📄 Unduh Laporan PDF Dashboard",
+                        data=pdf_data.getvalue(),
+                        file_name="Laporan_Kualitas_D52B_Dashboard.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+            else:
+                st.warning("Pastikan `matplotlib` dan `reportlab` sudah ditambahkan ke `requirements.txt` di GitHub.")
+
+        with col_excel:
+            st.subheader("📊 Laporan Excel (Data Mentah)")
+            st.caption("Menyimpan seluruh data tabular rekapitulasi defect untuk keperluan analisis spreadsheet.")
+            buffer_excel = BytesIO()
+            with pd.ExcelWriter(buffer_excel, engine="openpyxl") as writer:
+                semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
+
+            st.download_button(
+                label="📊 Unduh Laporan Excel",
+                data=buffer_excel.getvalue(),
+                file_name="Laporan_Kualitas_D52B.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        st.markdown("---")
+        st.subheader("Tinjauan Data Rekapitulasi")
+        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)

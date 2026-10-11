@@ -445,6 +445,46 @@ def buat_grafik_tren_bulanan(df):
     )
     return fig
 
+def buat_grafik_tren_top3_bulanan():
+    semua_df = buat_dataframe_keseluruhan()
+    if semua_df.empty:
+        return None
+
+    # Filter Top 3 per bulan untuk Januari - September
+    top3_per_bulan = []
+    for m in BULAN_LIST[:9]:
+        df_m = semua_df[semua_df["Bulan"] == m]
+        if not df_m.empty:
+            top3 = df_m.sort_values("Jumlah", ascending=False).head(3)
+            top3_per_bulan.append(top3)
+
+    if not top3_per_bulan:
+        return None
+
+    df_top3_concat = pd.concat(top3_per_bulan)
+    jenis_ng_top3 = df_top3_concat["NG"].unique()
+
+    # Ambil tren pergerakan untuk semua jenis NG yang pernah masuk Top 3
+    df_filtered = semua_df[semua_df["NG"].isin(jenis_ng_top3)].copy()
+
+    fig = px.line(
+        df_filtered,
+        x="Bulan",
+        y="Jumlah",
+        color="NG",
+        markers=True,
+        category_orders={"Bulan": BULAN_LIST[:9]},
+        title="<b>Tren Pergerakan Defect Top 3 per Bulan (Januari – September)</b>"
+    )
+
+    fig.update_layout(
+        xaxis=dict(title="Bulan", gridcolor="#1e293b", showgrid=False),
+        yaxis=dict(title="Jumlah Defect (Pcs)", gridcolor="#1e293b", showgrid=True),
+        height=420,
+        **TEMA_GELAP
+    )
+    return fig
+
 # ============================================================
 # NAVIGASI SIDEBAR
 # ============================================================
@@ -503,6 +543,19 @@ if halaman == "Ringkasan Dashboard":
         if fig_trend: st.plotly_chart(fig_trend, use_container_width=True)
     else:
         st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
+
+    st.markdown("---")
+    st.subheader("📊 Grafik Tren Top 3 Defect (Januari – September)")
+    st.caption("Menampilkan tren pergerakan khusus untuk jenis defect yang paling sering masuk 3 besar di setiap bulan.")
+
+    if not semua_data.empty:
+        fig_top3 = buat_grafik_tren_top3_bulanan()
+        if fig_top3:
+            st.plotly_chart(fig_top3, use_container_width=True)
+        else:
+            st.info("Data belum cukup untuk menampilkan grafik Top 3.")
+    else:
+        st.info("Sinkronkan data terlebih dahulu untuk melihat grafik tren Top 3.")
 
     st.markdown("---")
     c1, c2 = st.columns([2, 1])
@@ -594,65 +647,4 @@ elif halaman == "Upload / Sinkronisasi Data":
     tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
 
     with tab1:
-        st.subheader("Baca Otomatis Folder Google Drive")
-        st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
-        
-        folder_input = st.text_input("ID Folder Google Drive", value=DEFAULT_FOLDER_ID)
-
-        if st.button("🔄 Sync Data dari Google Drive", type="primary"):
-            with st.spinner("Membaca dan memproses file dari Google Drive..."):
-                synced_count = sinkronkan_data_dari_drive(folder_input)
-                if synced_count > 0:
-                    st.success(f"Berhasil membaca {synced_count} file rekap dari Google Drive!")
-                else:
-                    st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
-
-    with tab2:
-        st.subheader("Upload File Excel Langsung ke Google Drive")
-        uploaded_file = st.file_uploader("Pilih File Excel (.xlsx)", type=["xlsx", "xls"])
-
-        if uploaded_file is not None:
-            if st.button("🚀 Upload File & Sync Dashboard", type="primary"):
-                with st.spinner("Mengunggah file ke Google Drive..."):
-                    file_bytes = uploaded_file.getvalue()
-                    file_name = uploaded_file.name
-
-                    if unggah_file_ke_drive(file_bytes, file_name, folder_input):
-                        st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
-                        
-                        synced = sinkronkan_data_dari_drive(folder_input)
-                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} file terproses)")
-
-    st.markdown("---")
-    st.subheader("🗑️ Bersihkan Data Sesi")
-    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tampil di dashboard dan memulai dari awal.")
-
-    if st.button("🚨 Hapus / Clear Seluruh Data Dashboard"):
-        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-        st.success("Seluruh data dashboard berhasil dibersihkan!")
-        st.rerun()
-
-# ============================================================
-# HALAMAN 5: EKSPOR LAPORAN
-# ============================================================
-
-elif halaman == "Ekspor Laporan":
-    st.title("Ekspor & Manajemen Data")
-
-    semua_rekap = buat_dataframe_keseluruhan()
-
-    if semua_rekap.empty:
-        st.info("Belum ada data yang tersedia untuk diekspor.")
-    else:
-        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)
-
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
-
-        st.download_button(
-            "Unduh Laporan Excel",
-            data=buffer.getvalue(),
-            file_name="Laporan_Kualitas_D52B.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        st

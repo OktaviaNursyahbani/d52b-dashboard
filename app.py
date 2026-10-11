@@ -6,13 +6,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from io import BytesIO
 import re
-import json
-from streamlit_gsheets import GSheetsConnection
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials
 
 # ============================================================
-# KONFIGURASI HALAMAN
+# PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
@@ -23,7 +22,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS RESPONSIF INDUSTRIAL
+# RESPONSIVE INDUSTRIAL CSS
 # ============================================================
 
 st.markdown("""
@@ -102,7 +101,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================
-# KONSTANTA & KONFIGURASI
+# CONSTANTS & CONFIG
 # ============================================================
 
 MONTHS = [
@@ -151,7 +150,7 @@ AREA_LEADER_MAP = {
 AREA_NAMES = list(AREA_LEADER_MAP.keys())
 
 # ============================================================
-# FUNGSI BANTU
+# HELPER FUNCTIONS
 # ============================================================
 
 def normalize_text(value):
@@ -281,143 +280,102 @@ def parse_d52b_sheet(df, sheet_name):
     return {"month": month, "area_data": {}, "total_data": fallback_total, "success": len(fallback_total) > 0}
 
 # ============================================================
-# KONEKSI DATABASE & GOOGLE DRIVE
+# GOOGLE DRIVE DATABASE FUNCTIONS
 # ============================================================
 
-def load_data_from_db():
+def get_drive_service():
+    """Membuat koneksi ke Google Drive Service Account"""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        df = conn.read(worksheet="Sheet1", ttl=0)
-        if not df.empty and "Bulan" in df.columns and "NG" in df.columns and "Jumlah" in df.columns:
-            df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors="coerce").fillna(0)
-            return df
-    except Exception:
-        pass
-    return pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
+        # Menggunakan kredensial dari gsheets/service_account di Secrets
+        creds_info = dict(st.secrets.get("connections", {}).get("gsheets", {}))
+        
+        if not creds_info:
+            creds_info = dict(st.secrets)
 
-def save_data_to_db(df):
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        conn.update(worksheet="Sheet1", data=df)
-        st.cache_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Gagal menyimpan ke Google Sheets: {e}")
-        return False
-
-def get_drive_credentials():
-    """
-    Ambil kredensial service account dari Streamlit Secrets.
-    Menangani konversi \\n literal ke newline asli pada private_key (penyebab PEM error).
-    """
-    try:
-        # Prioritas: ambil dari [gcp_service_account] jika ada
-        if "gcp_service_account" in st.secrets:
-            creds_info = dict(st.secrets["gcp_service_account"])
-        elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-            creds_info = dict(st.secrets["connections"]["gsheets"])
-        else:
-            # Fallback: baca dari file lokal gdrive_credentials.json
-            with open("gdrive_credentials.json", "r") as f:
-                creds_info = json.load(f)
-
-        # PERBAIKAN PEM ERROR:
-        # Pastikan private_key berisi newline asli (\n), bukan literal \\n
         if "private_key" in creds_info:
-            pk = creds_info["private_key"]
-            if "\\n" in pk:
-                pk = pk.replace("\\n", "\n")
-            if "-----BEGIN PRIVATE KEY-----" not in pk:
-                raise ValueError("Format private_key tidak valid: header PEM tidak ditemukan.")
+            pk = str(creds_info["private_key"]).strip().strip("'\"").replace("\\n", "\n")
+            if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
+                core_key = pk.split("-----BEGIN PRIVATE KEY-----")[1].split("-----END PRIVATE KEY-----")[0].strip()
+                core_key = "".join(core_key.split())
+                pk = f"-----BEGIN PRIVATE KEY-----\n{core_key}\n-----END PRIVATE KEY-----\n"
             creds_info["private_key"] = pk
 
-        return creds_info
+        scopes = ['https://www.googleapis.com/auth/drive']
+        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
+        return build('drive', 'v3', credentials=creds)
+    except Exception as e:
+        st.error(f"Koneksi Google Drive Gagal: {e}")
+        return None
 
-    except FileNotFoundError:
-        raise Exception(
-            "File kredensial tidak ditemukan. Pastikan 'gdrive_credentials.json' ada di folder proyek "
-            "atau konfigurasi Streamlit Secrets sudah benar."
-        )
+def upload_file_to_gdrive(file_bytes, file_name, folder_id):
+    """Mengunggah file Excel dari pengguna langsung ke Folder Google Drive"""
+    service = get_drive_service()
+    if not service: return False
+
+    try:
+        file_metadata = {
+            'name': file_name,
+            'parents': [folder_id]
+        }
+        media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        
+        service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id'
+        ).execute()
+        return True
+    except Exception as e:
+        st.error(f"Gagal upload file ke Google Drive: {e}")
+        return False
 
 def sync_data_from_gdrive(folder_id):
-    try:
-        creds_info = get_drive_credentials()
+    """Membaca seluruh file Excel di Google Drive sebagai sumber database utama"""
+    service = get_drive_service()
+    if not service: return 0
 
-        scopes = ['https://www.googleapis.com/auth/drive.readonly']
-        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-        
-        drive_service = build('drive', 'v3', credentials=creds)
-        
+    try:
         query = f"'{folder_id}' in parents and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false"
-        results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+        results = service.files().list(q=query, fields="files(id, name)").execute()
         files = results.get('files', [])
-        
+
         if not files:
             return 0
-        
+
+        # Reset session state sebelum reload data dari Drive
+        st.session_state.monthly_data = {m: {} for m in MONTHS}
         count = 0
+
         for file in files:
-            request = drive_service.files().get_media(fileId=file['id'])
+            request = service.files().get_media(fileId=file['id'])
             file_stream = BytesIO(request.execute())
             excel = pd.ExcelFile(file_stream)
-            
+
             for sheet_name in excel.sheet_names:
                 df_sheet = pd.read_excel(file_stream, sheet_name=sheet_name, header=None)
                 parsed = parse_d52b_sheet(df_sheet, sheet_name)
-                
+
                 m = parsed.get("month") or detect_month_from_text(sheet_name)
                 if m:
                     for ng, total in parsed.get("total_data", {}).items():
-                        st.session_state.monthly_data[m][ng] = total
+                        if ng not in st.session_state.monthly_data[m]:
+                            st.session_state.monthly_data[m][ng] = 0
+                        st.session_state.monthly_data[m][ng] += total
                     count += 1
-                    
-        # Simpan ke Google Sheets
-        rows_all = []
-        for m in MONTHS:
-            for ng, jml in st.session_state.monthly_data[m].items():
-                if jml > 0: rows_all.append({"Bulan": m, "NG": ng, "Jumlah": jml})
-        
-        if rows_all:
-            save_data_to_db(pd.DataFrame(rows_all))
-            
+
         return count
     except Exception as e:
-        st.error(f"Error sinkronisasi Google Drive: {e}")
+        st.error(f"Error membaca dari Google Drive: {e}")
         return 0
 
 # ============================================================
-# INISIALISASI SESSION STATE
+# SESSION STATE INITIALIZATION
 # ============================================================
-
-db_df = load_data_from_db()
 
 if "monthly_data" not in st.session_state:
     st.session_state.monthly_data = {m: {} for m in MONTHS}
-    if not db_df.empty:
-        for _, row in db_df.iterrows():
-            m = str(row["Bulan"])
-            ng = str(row["NG"])
-            jml = int(row["Jumlah"])
-            if m in st.session_state.monthly_data and jml > 0:
-                st.session_state.monthly_data[m][ng] = jml
 
-def merge_uploaded_result(parsed):
-    month = parsed.get("month")
-    if not month: return False
-    total_data = parsed.get("total_data", {})
-
-    for ng_name, total in total_data.items():
-        st.session_state.monthly_data[month][ng_name] = total
-
-    rows = []
-    for m in MONTHS:
-        for ng, jml in st.session_state.monthly_data[m].items():
-            if jml > 0: rows.append({"Bulan": m, "NG": ng, "Jumlah": jml})
-    
-    if rows:
-        save_data_to_db(pd.DataFrame(rows))
-
-    return True
+DEFAULT_FOLDER_ID = st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJKG3jX3U")
 
 def build_month_dataframe(month):
     data = st.session_state.monthly_data.get(month, {})
@@ -442,7 +400,7 @@ def build_overall_dataframe():
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
 
 # ============================================================
-# GRAFIK PLOTLY RESPONSIF
+# RESPONSIVE PLOTLY CHARTS
 # ============================================================
 
 DARK_THEME_LAYOUT = dict(
@@ -503,44 +461,44 @@ def create_monthly_trend_chart(df):
     ))
 
     fig.update_layout(
-        title=dict(text="Total Volume Defect per Bulan (Bulan Tertinggi Ditandai Merah)", font=dict(color="#f8fafc", size=14)),
+        title=dict(text="Total Defect Volume per Month (Highest Highlighted)", font=dict(color="#f8fafc", size=14)),
         xaxis=dict(gridcolor="#1e293b", showgrid=False),
-        yaxis=dict(title="Jumlah Defect", gridcolor="#1e293b", showgrid=True),
+        yaxis=dict(title="Defect Count", gridcolor="#1e293b", showgrid=True),
         height=350,
         **DARK_THEME_LAYOUT
     )
     return fig
 
 # ============================================================
-# NAVIGASI SIDEBAR
+# SIDEBAR NAVIGATION
 # ============================================================
 
 with st.sidebar:
     st.markdown("### ⚡ D52B Quality Hub")
-    st.caption("Dashboard Sewing Assembly")
+    st.caption("Sewing Assembly Dashboard")
     st.markdown("---")
 
     page = st.radio(
         "MENU NAVIGASI",
         [
-            "Ringkasan Dashboard",
+            "Dashboard Overview",
             "Pareto Bulanan",
-            "Editor Data",
-            "Upload / Sinkronisasi Data",
-            "Ekspor Laporan"
+            "Data Grid Editor",
+            "Upload / Sync Data",
+            "Export Reports"
         ]
     )
 
     st.markdown("---")
-    st.caption("Status database: **Tersinkronisasi ke Cloud**")
+    st.caption("Database Storage: **Google Drive Folder**")
 
 # ============================================================
-# HALAMAN 1: RINGKASAN DASHBOARD
+# PAGE 1: DASHBOARD OVERVIEW
 # ============================================================
 
-if page == "Ringkasan Dashboard":
-    st.title("Ringkasan Eksekutif Kualitas")
-    st.caption("Analitik Defect Real-time Lintas Bulan Produksi")
+if page == "Dashboard Overview":
+    st.title("Quality Executive Summary")
+    st.caption("Real-time Defect Analytics Driven by Google Drive Storage")
 
     all_data = build_overall_dataframe()
 
@@ -555,28 +513,28 @@ if page == "Ringkasan Dashboard":
         highest_month, highest_month_val, top_ng_overall = "-", 0, "-"
 
     col1, col2, col3, col4 = st.columns(4)
-    with col1: st.metric("Total Volume Defect", format_int(total_ng_all))
-    with col2: st.metric("Bulan Puncak Defect", f"{highest_month}", f"{format_int(highest_month_val)} NG")
-    with col3: st.metric("Jenis Defect Utama", top_ng_overall)
+    with col1: st.metric("Total Defect Volume", format_int(total_ng_all))
+    with col2: st.metric("Peak Defect Month", f"{highest_month}", f"{format_int(highest_month_val)} NG")
+    with col3: st.metric("Primary Defect Type", top_ng_overall)
     with col4:
         active_months = len(all_data["Bulan"].unique()) if not all_data.empty else 0
-        st.metric("Bulan Tercatat", f"{active_months} Bulan")
+        st.metric("Recorded Months", f"{active_months} Months")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    st.subheader("Perbandingan Defect per Bulan")
+    st.subheader("Monthly Defect Comparison")
     if not all_data.empty:
         fig_trend = create_monthly_trend_chart(all_data)
         if fig_trend: st.plotly_chart(fig_trend, use_container_width=True)
     else:
-        st.info("Belum ada data. Silakan upload file manual atau sinkronisasi dari Google Drive.")
+        st.info("Belum ada data. Silakan sync dari Google Drive di menu 'Upload / Sync Data'.")
 
     st.markdown("---")
     c1, c2 = st.columns([2, 1])
-    with c1: st.subheader("Analisis Pareto Defect")
-    with c2: scope = st.selectbox("Filter Periode", ["Semua Bulan"] + MONTHS)
+    with c1: st.subheader("Defect Pareto Breakdown")
+    with c2: scope = st.selectbox("Filter Period", ["All Months"] + MONTHS)
 
-    if scope == "Semua Bulan":
+    if scope == "All Months":
         scope_df = all_data.groupby("NG")["Jumlah"].sum().reset_index() if not all_data.empty else pd.DataFrame()
     else:
         scope_df = all_data[all_data["Bulan"] == scope].groupby("NG")["Jumlah"].sum().reset_index() if not all_data.empty else pd.DataFrame()
@@ -587,159 +545,132 @@ if page == "Ringkasan Dashboard":
         scope_df = scope_df.sort_values("Jumlah", ascending=False).reset_index(drop=True)
         scope_df["Kumulatif"] = scope_df["Persentase"].cumsum()
 
-        fig_pareto = create_pareto_chart(scope_df, f"Analisis Pareto — {scope}")
+        fig_pareto = create_pareto_chart(scope_df, f"Pareto Analysis — {scope}")
         st.plotly_chart(fig_pareto, use_container_width=True)
     else:
-        st.warning(f"Tidak ada data untuk periode: {scope}")
+        st.warning(f"No records found for period: {scope}")
 
 # ============================================================
-# HALAMAN 2: PARETO BULANAN
+# PAGE 2: PARETO BULANAN
 # ============================================================
 
 elif page == "Pareto Bulanan":
-    st.title("Analitik Pareto Bulanan")
+    st.title("Monthly Pareto Analytics")
 
-    selected_month = st.selectbox("Pilih Bulan Target", MONTHS, index=0)
+    selected_month = st.selectbox("Select Target Month", MONTHS, index=0)
     df_month = build_month_dataframe(selected_month)
 
     if df_month.empty:
-        st.warning(f"Belum ada data yang dimuat untuk bulan **{selected_month}**.")
+        st.warning(f"No dataset loaded for **{selected_month}**.")
     else:
         total_ng = df_month["Jumlah"].sum()
         col1, col2, col3 = st.columns(3)
-        with col1: st.metric("Total Defect Bulanan", format_int(total_ng))
-        with col2: st.metric("Kategori Defect Teratas", df_month.iloc[0]["NG"])
-        with col3: st.metric("Jumlah Kategori Teratas", format_int(df_month.iloc[0]["Jumlah"]))
+        with col1: st.metric("Total Monthly Defect", format_int(total_ng))
+        with col2: st.metric("Top Defect Category", df_month.iloc[0]["NG"])
+        with col3: st.metric("Top Category Count", format_int(df_month.iloc[0]["Jumlah"]))
 
-        fig = create_pareto_chart(df_month, f"Distribusi Pareto — {selected_month}")
+        fig = create_pareto_chart(df_month, f"Pareto Distribution — {selected_month}")
         st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader(f"Tabel Rincian Defect — {selected_month}")
+        st.subheader(f"Detailed Defect Table — {selected_month}")
         display_df = df_month.copy()
         display_df["Persentase"] = display_df["Persentase"].round(2).astype(str) + " %"
         display_df["Kumulatif"] = display_df["Kumulatif"].round(2).astype(str) + " %"
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 # ============================================================
-# HALAMAN 3: EDITOR DATA
+# PAGE 3: DATA GRID EDITOR
 # ============================================================
 
-elif page == "Editor Data":
-    st.title("Input Manual & Tinjauan Data")
-    st.caption("Perbarui jumlah NG bulanan secara langsung dan sinkronisasi ke Google Sheets")
+elif page == "Data Grid Editor":
+    st.title("Manual Data Review")
+    st.caption("Review active session defect numbers")
 
-    edit_month = st.selectbox("Pilih Bulan yang Akan Diedit", MONTHS)
+    edit_month = st.selectbox("Select Month to Review", MONTHS)
     current_data = st.session_state.monthly_data.get(edit_month, {})
 
-    rows = [{"Kategori Defect": ng, "Jumlah": current_data.get(ng, 0)} for ng in NG_TYPES]
+    rows = [{"Defect Category": ng, "Quantity": current_data.get(ng, 0)} for ng in NG_TYPES]
     df_edit = pd.DataFrame(rows)
 
     edited_df = st.data_editor(
         df_edit,
         use_container_width=True,
         hide_index=True,
-        column_config={"Jumlah": st.column_config.NumberColumn(min_value=0, step=1)}
+        column_config={"Quantity": st.column_config.NumberColumn(min_value=0, step=1)}
     )
 
-    if st.button("Simpan & Sinkronisasi ke Database", type="primary"):
+    if st.button("Update Session Data"):
         new_data = {}
         for _, r in edited_df.iterrows():
-            qty = clean_number(r["Jumlah"])
-            if qty > 0: new_data[str(r["Kategori Defect"])] = qty
+            qty = clean_number(r["Quantity"])
+            if qty > 0: new_data[str(r["Defect Category"])] = qty
 
         st.session_state.monthly_data[edit_month] = new_data
-
-        rows_all = []
-        for m in MONTHS:
-            for ng, jml in st.session_state.monthly_data[m].items():
-                if jml > 0: rows_all.append({"Bulan": m, "NG": ng, "Jumlah": jml})
-
-        if save_data_to_db(pd.DataFrame(rows_all)):
-            st.success(f"Data berhasil disimpan & disinkronisasi ke Google Sheets untuk bulan {edit_month}.")
+        st.success(f"Session data updated for {edit_month}.")
 
 # ============================================================
-# HALAMAN 4: UPLOAD / SINKRONISASI DATA
+# PAGE 4: HYBRID IMPORT (AUTO DRIVE SYNC & DIRECT UPLOAD)
 # ============================================================
 
-elif page == "Upload / Sinkronisasi Data":
-    st.title("Impor Data & Sinkronisasi")
-    st.caption("Pilih metode impor data: Upload manual dari komputer atau Auto Sync dari Google Drive.")
+elif page == "Upload / Sync Data":
+    st.title("Data Import & Google Drive Sync")
+    st.caption("Seluruh file Excel yang di-upload akan tersimpan otomatis ke Folder Google Drive.")
 
-    tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
+    tab1, tab2 = st.tabs(["📁 Sync dari Google Drive", "📤 Upload File ke Google Drive"])
 
     with tab1:
-        st.subheader("Baca Otomatis Folder Google Drive")
-        st.info("Sistem akan otomatis membaca seluruh file Excel Pareto D52B yang tersimpan di folder Google Drive tim lapangan.")
+        st.subheader("Baca Folder Google Drive")
+        st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
         
-        default_folder_id = st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJKG3jX3U")
-        folder_input = st.text_input("ID Folder Google Drive", value=default_folder_id)
+        folder_input = st.text_input("Google Drive Folder ID", value=DEFAULT_FOLDER_ID)
 
         if st.button("🔄 Sync Data dari Google Drive", type="primary"):
-            with st.spinner("Memproses file dari Google Drive..."):
+            with st.spinner("Membaca dan memproses file dari Google Drive..."):
                 synced_count = sync_data_from_gdrive(folder_input)
                 if synced_count > 0:
-                    st.success(f"✅ Berhasil menyinkronkan {synced_count} sheet data dari Google Drive ke Dashboard & Google Sheets!")
+                    st.success(f"Berhasil membaca {synced_count} sheet data dari Google Drive!")
                 else:
-                    st.warning("Tidak ada file Excel baru yang ditemukan atau folder tidak dapat diakses.")
+                    st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
 
     with tab2:
-        st.subheader("Upload File Manual")
-        uploaded_file = st.file_uploader("Upload File (.xlsx, .csv)", type=["xlsx", "xls", "csv"])
+        st.subheader("Upload File Excel Langsung ke Google Drive")
+        uploaded_file = st.file_uploader("Pilih File Excel (.xlsx)", type=["xlsx", "xls"])
 
         if uploaded_file is not None:
-            file_bytes = uploaded_file.getvalue()
+            if st.button("🚀 Upload File & Sync Dashboard", type="primary"):
+                with st.spinner("Mengunggah file ke Google Drive..."):
+                    file_bytes = uploaded_file.getvalue()
+                    file_name = uploaded_file.name
 
-            if uploaded_file.name.lower().endswith(".csv"):
-                try:
-                    df_csv = pd.read_csv(BytesIO(file_bytes))
-                    target_m = st.selectbox("Tetapkan Data CSV ke Bulan", MONTHS)
-                    if st.button("Proses & Sinkronisasi CSV"):
-                        parsed = parse_d52b_sheet(df_csv, target_m)
-                        parsed["month"] = target_m
-                        merge_uploaded_result(parsed)
-                        st.success(f"Data CSV berhasil diimpor dan disinkronisasi untuk bulan {target_m}.")
-                except Exception as e: st.error(f"Error memproses CSV: {e}")
-
-            else:
-                try:
-                    excel = pd.ExcelFile(BytesIO(file_bytes))
-                    sheets = excel.sheet_names
-                    st.success(f"Workbook berhasil dimuat ({len(sheets)} sheet terdeteksi).")
-
-                    if st.button("Import & Sinkronisasi File Excel", type="primary"):
-                        success_count = 0
-                        for s in sheets:
-                            raw = pd.read_excel(BytesIO(file_bytes), sheet_name=s, header=None)
-                            parsed = parse_d52b_sheet(raw, s)
-                            m = parsed.get("month") or detect_month_from_text(s)
-                            if m:
-                                parsed["month"] = m
-                                if merge_uploaded_result(parsed): success_count += 1
-
-                        st.success(f"✅ Berhasil memproses & menyinkronkan {success_count} sheet ke Google Sheets.")
-                except Exception as e: st.error(f"Error memproses workbook Excel: {e}")
+                    # 1. Upload file fisik langsung ke Google Drive
+                    if upload_file_to_gdrive(file_bytes, file_name, DEFAULT_FOLDER_ID):
+                        st.success(f"File **{file_name}** berhasil disimpan di Google Drive!")
+                        
+                        # 2. Re-sync data dari Google Drive
+                        synced = sync_data_from_gdrive(DEFAULT_FOLDER_ID)
+                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} sheet terproses)")
 
 # ============================================================
-# HALAMAN 5: EKSPOR LAPORAN
+# PAGE 5: EXPORT REPORTS
 # ============================================================
 
-elif page == "Ekspor Laporan":
-    st.title("Ekspor & Manajemen Data")
+elif page == "Export Reports":
+    st.title("Export & Data Management")
 
     overall = build_overall_dataframe()
 
     if overall.empty:
-        st.info("Tidak ada data yang tersedia untuk diekspor.")
+        st.info("No current data available for export.")
     else:
         st.dataframe(overall, use_container_width=True, hide_index=True)
 
         buffer = BytesIO()
         with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-            overall.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
+            overall.to_excel(writer, sheet_name="Defect Summary", index=False)
 
         st.download_button(
-            "⬇️ Unduh Laporan Excel",
+            "Download Excel Report",
             data=buffer.getvalue(),
-            file_name="D52B_Laporan_Kualitas.xlsx",
+            file_name="D52B_Quality_Report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )

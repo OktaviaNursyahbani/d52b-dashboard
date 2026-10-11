@@ -198,11 +198,12 @@ def normalisasi_area(value):
 def deteksi_bulan_dari_teks(text):
     if not text: return None
     value = normalisasi_teks(text)
-    pola = r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|okt|nov|dec|des)[\s\-_\/]*\d{2,4}\b"
-    match = re.search(pola, value)
-    if match: return ALIAS_BULAN.get(match.group(1))
     for alias, bulan in ALIAS_BULAN.items():
-        if alias in value: return bulan
+        if re.search(r'\b' + re.escape(alias) + r'\b', value):
+            return bulan
+    for alias, bulan in ALIAS_BULAN.items():
+        if alias in value:
+            return bulan
     return None
 
 def deteksi_bulan_dari_dataframe(df, sheet_name=""):
@@ -330,10 +331,12 @@ def sinkronkan_data_dari_drive(folder_id):
 
         if not files: return 0
 
+        # Reset session state awal
         st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
         jumlah_sheet = 0
 
         for file in files:
+            file_name = file.get('name', '')
             request = service.files().get_media(fileId=file['id'])
             file_stream = BytesIO(request.execute())
             excel = pd.ExcelFile(file_stream)
@@ -342,7 +345,9 @@ def sinkronkan_data_dari_drive(folder_id):
                 df_sheet = pd.read_excel(file_stream, sheet_name=sheet_name, header=None)
                 parsed = baca_sheet_d52b(df_sheet, sheet_name)
 
-                m = parsed.get("month") or deteksi_bulan_dari_teks(sheet_name)
+                # Deteksi bulan dari hasil ekstraksi, nama sheet, atau nama file
+                m = parsed.get("month") or deteksi_bulan_dari_teks(sheet_name) or deteksi_bulan_dari_teks(file_name)
+
                 if m:
                     for ng, total in parsed.get("total_data", {}).items():
                         if ng not in st.session_state.monthly_data[m]:
@@ -362,7 +367,7 @@ def sinkronkan_data_dari_drive(folder_id):
 if "monthly_data" not in st.session_state:
     st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
 
-DEFAULT_FOLDER_ID = str(st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJKG3jX3U")).strip()
+DEFAULT_FOLDER_ID = str(st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJkG3jX3U")).strip()
 
 def buat_dataframe_bulan(bulan):
     data = st.session_state.monthly_data.get(bulan, {})

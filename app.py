@@ -639,6 +639,15 @@ elif halaman == "Upload / Sinkronisasi Data":
                         synced = sinkronkan_data_dari_drive(folder_input)
                         st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} sheet terproses)")
 
+    st.markdown("---")
+    st.subheader("🗑️ Bersihkan Data Sesi")
+    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tampil di dashboard dan memulai dari awal.")
+
+    if st.button("🚨 Hapus / Clear Seluruh Data Dashboard"):
+        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+        st.success("Seluruh data dashboard berhasil dibersihkan!")
+        st.rerun()
+
 # ============================================================
 # HALAMAN 5: EKSPOR LAPORAN
 # ============================================================

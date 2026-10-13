@@ -149,38 +149,128 @@ JENIS_NG = [
     "Arah motif terbalik", "Cacat bahan"
 ]
 
-# Pemetaan Pos/Proses Kerja Line D52B berdasarkan Jenis Defect (NG)
-PEMETAAN_POS_NG = {
-    "Benang over/ Keluar": "Pos Sewing / Benang (Mesin Jahit Line D52B)",
-    "Jahitan kenceng": "Pos Setting Tension / Setting Mesin Sewing",
-    "Benang kendor (Machine)": "Pos Maintenance Mesin / Setting Tension Sewing",
-    "Jarak jahitan tidak standar": "Pos Setting Feeding & Stitch Regulator",
-    "Bahan Balap Tidak Standar": "Pos Preparation / Feeding Material",
-    "Langkah Jahitan tidak standar": "Pos Operasional Sewing / Stitch Controller",
-    "Kuncian putus/ Lepas / Tidak ada": "Pos Sewing Backtack / Kuncian Jahitan",
-    "Point tidak center": "Pos Assembly & Fitting Center Point",
-    "Lipatan tidak standar": "Pos Manual Folding & Hemming",
-    "Jahitan putus": "Pos Sewing Assembly / Jarum & Benang",
-    "Jahitan loncat": "Pos Timing Looper / Needle Adjustment",
-    "Jahitan keriput": "Pos Material Puller & Tensioner",
-    "Jahitan gelombang": "Pos Setting Presser Foot / Sepatu Mesin",
-    "Ex jarum": "Pos Handling Material & Replacement Needle",
-    "Benang Pecah": "Pos Quality Thread & Needle Bar",
-    "Bahan terlipat/Terjahit": "Pos Operasional Sewing / Manual Handling",
-    "Tepu tidak terpotong": "Pos Trimming & Finishing",
-    "Takure": "Pos Assembly Fitting / Presser Line",
-    "Sampah Benang Terjahit": "Pos Housekeeping & Cleaning Area Sewing",
-    "Noda bahan": "Pos Handling Material & Inspection Fabric",
-    "Part tidak terpasang": "Pos Sub-Assembly & Component Fitting",
-    "Part terpasang terbalik": "Pos Sub-Assembly & Visual Inspection",
-    "Part salah pasang": "Pos Preparation & Kitting Part",
-    "Tidak ada sutechi": "Pos Top Stitching / Sutechi Line",
-    "Part terpasang Double": "Pos Sub-Assembly Line",
-    "Over part": "Pos Material Control & Kitting",
-    "Tidak ada Piping": "Pos Piping Attachment Line",
-    "GAP Bahan Tidak Standar": "Pos Fitting & Alignment Material",
-    "Arah motif terbalik": "Pos Preparation / Cutting & Layout",
-    "Cacat bahan": "Pos Receiving Inspection / Supplier Fabric QC"
+# Pemetaan Pos Line & Leader Penanggung Jawab berdasarkan Jenis Defect (NG)
+PEMETAAN_POS_DAN_LEADER = {
+    "Benang over/ Keluar": {
+        "pos": "Pos Sewing / Benang (Mesin Jahit Line D52B)",
+        "leader": "Jupron (Leader Sewing) / Enang"
+    },
+    "Jahitan kenceng": {
+        "pos": "Pos Setting Tension / Setting Mesin Sewing",
+        "leader": "Edy (Leader Maintenance & Setting)"
+    },
+    "Benang kendor (Machine)": {
+        "pos": "Pos Maintenance Mesin / Tension Control",
+        "leader": "Edy (Leader Maintenance)"
+    },
+    "Jarak jahitan tidak standar": {
+        "pos": "Pos Setting Feeding & Stitch Regulator",
+        "leader": "Jupron (Leader Line)"
+    },
+    "Bahan Balap Tidak Standar": {
+        "pos": "Pos Preparation / Feeding Material",
+        "leader": "Erna (Leader Prep & Material)"
+    },
+    "Langkah Jahitan tidak standar": {
+        "pos": "Pos Operasional Sewing / Stitch Controller",
+        "leader": "Jupron (Leader Sewing)"
+    },
+    "Kuncian putus/ Lepas / Tidak ada": {
+        "pos": "Pos Sewing Backtack / Kuncian Jahitan",
+        "leader": "Enang (Leader Operasional)"
+    },
+    "Point tidak center": {
+        "pos": "Pos Assembly & Fitting Center Point",
+        "leader": "Enang (Leader Assembly)"
+    },
+    "Lipatan tidak standar": {
+        "pos": "Pos Manual Folding & Hemming",
+        "leader": "Erna (Leader Preparation)"
+    },
+    "Jahitan putus": {
+        "pos": "Pos Sewing Assembly / Jarum & Benang",
+        "leader": "Jupron (Leader Line)"
+    },
+    "Jahitan loncat": {
+        "pos": "Pos Timing Looper / Needle Adjustment",
+        "leader": "Edy (Leader Maintenance)"
+    },
+    "Jahitan keriput": {
+        "pos": "Pos Material Puller & Tensioner",
+        "leader": "Jupron (Leader Sewing)"
+    },
+    "Jahitan gelombang": {
+        "pos": "Pos Setting Presser Foot / Sepatu Mesin",
+        "leader": "Edy (Leader Setting)"
+    },
+    "Ex jarum": {
+        "pos": "Pos Handling Material & Replacement Needle",
+        "leader": "Enang (Leader Line)"
+    },
+    "Benang Pecah": {
+        "pos": "Pos Quality Thread & Needle Bar",
+        "leader": "Edy (Leader Maintenance)"
+    },
+    "Bahan terlipat/Terjahit": {
+        "pos": "Pos Operasional Sewing / Manual Handling",
+        "leader": "Jupron (Leader Sewing)"
+    },
+    "Tepu tidak terpotong": {
+        "pos": "Pos Trimming & Finishing",
+        "leader": "Erna (Leader Finishing)"
+    },
+    "Takure": {
+        "pos": "Pos Assembly Fitting / Presser Line",
+        "leader": "Enang (Leader Assembly)"
+    },
+    "Sampah Benang Terjahit": {
+        "pos": "Pos Housekeeping & Cleaning Area Sewing",
+        "leader": "Erna (Leader Area)"
+    },
+    "Noda bahan": {
+        "pos": "Pos Handling Material & Inspection Fabric",
+        "leader": "Erna (Leader Material QC)"
+    },
+    "Part tidak terpasang": {
+        "pos": "Pos Sub-Assembly & Component Fitting",
+        "leader": "Enang (Leader Sub-Assy)"
+    },
+    "Part terpasang terbalik": {
+        "pos": "Pos Sub-Assembly & Visual Inspection",
+        "leader": "Enang (Leader Sub-Assy)"
+    },
+    "Part salah pasang": {
+        "pos": "Pos Preparation & Kitting Part",
+        "leader": "Erna (Leader Kitting)"
+    },
+    "Tidak ada sutechi": {
+        "pos": "Pos Top Stitching / Sutechi Line",
+        "leader": "Jupron (Leader Top Stitching)"
+    },
+    "Part terpasang Double": {
+        "pos": "Pos Sub-Assembly Line",
+        "leader": "Enang (Leader Sub-Assy)"
+    },
+    "Over part": {
+        "pos": "Pos Material Control & Kitting",
+        "leader": "Erna (Leader Kitting)"
+    },
+    "Tidak ada Piping": {
+        "pos": "Pos Piping Attachment Line",
+        "leader": "Jupron (Leader Line)"
+    },
+    "GAP Bahan Tidak Standar": {
+        "pos": "Pos Fitting & Alignment Material",
+        "leader": "Enang (Leader Fitting)"
+    },
+    "Arah motif terbalik": {
+        "pos": "Pos Preparation / Cutting & Layout",
+        "leader": "Erna (Leader Preparation)"
+    },
+    "Cacat bahan": {
+        "pos": "Pos Receiving Inspection / Supplier Fabric QC",
+        "leader": "Erna (Leader Material Inspection)"
+    }
 }
 
 FOLDER_DATA_LOKAL = "data_excel"
@@ -630,7 +720,7 @@ if halaman == "Ringkasan Dashboard":
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
 
         # ============================================================
-        # FITUR BARU SESUAI REVISI: FITUR PILIH BULAN & PARETO BESAR KE KECIL
+        # FITUR: PILIH BULAN & ANALISIS POS + LEADER
         # ============================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🎯 Analisis Rincian Defect per Bulan (Terurut Besar ke Kecil)")
@@ -650,17 +740,24 @@ if halaman == "Ringkasan Dashboard":
             fig_p_bulan = buat_grafik_pareto(df_bulan_pilihan, f"Grafik Semua Defect (Terurut Besar ke Kecil) — Bulan {bulan_dipilih}")
             st.plotly_chart(fig_p_bulan, use_container_width=True)
 
-            # Keterangan Pos / Area yang Mengeluarkan NG Terbanyak
+            # Keterangan Pos / Area & Leader Penanggung Jawab
             top_ng_row = df_bulan_pilihan.iloc[0]
             nama_top_ng = top_ng_row["NG"]
             jumlah_top_ng = int(top_ng_row["Jumlah"])
             persen_top_ng = round(top_ng_row["Persentase"], 2)
-            pos_penyebab = PEMETAAN_POS_NG.get(nama_top_ng, "Pos Area Sewing Line D52B")
+            
+            info_detail = PEMETAAN_POS_DAN_LEADER.get(nama_top_ng, {
+                "pos": "Pos Area Sewing Line D52B",
+                "leader": "Jupron / Enang (Leader Line D52B)"
+            })
+            pos_penyebab = info_detail["pos"]
+            leader_penyebab = info_detail["leader"]
 
             st.info(f"""
             **📌 KETERANGAN RINGKASAN DEFECT (BULAN {bulan_dipilih.upper()}):**
             * **Defect (NG) Terbanyak:** `{nama_top_ng}` sejumlah **{jumlah_top_ng} pcs** ({persen_top_ng}% dari total defect bulan {bulan_dipilih}).
-            * **Pos / Area Penyebab Utama:** Defect ini mayoritas bersumber / dikeluarkan dari **{pos_penyebab}**.
+            * **Pos / Area Line Utama:** Defect ini mayoritas bersumber / dikeluarkan dari **{pos_penyebab}**.
+            * **Leader Penanggung Jawab:** **{leader_penyebab}**.
             """)
         else:
             st.warning(f"Belum ada data defect untuk bulan **{bulan_dipilih}**.")

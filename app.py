@@ -149,6 +149,40 @@ JENIS_NG = [
     "Arah motif terbalik", "Cacat bahan"
 ]
 
+# Pemetaan Pos/Proses Kerja Line D52B berdasarkan Jenis Defect (NG)
+PEMETAAN_POS_NG = {
+    "Benang over/ Keluar": "Pos Sewing / Benang (Mesin Jahit Line D52B)",
+    "Jahitan kenceng": "Pos Setting Tension / Setting Mesin Sewing",
+    "Benang kendor (Machine)": "Pos Maintenance Mesin / Setting Tension Sewing",
+    "Jarak jahitan tidak standar": "Pos Setting Feeding & Stitch Regulator",
+    "Bahan Balap Tidak Standar": "Pos Preparation / Feeding Material",
+    "Langkah Jahitan tidak standar": "Pos Operasional Sewing / Stitch Controller",
+    "Kuncian putus/ Lepas / Tidak ada": "Pos Sewing Backtack / Kuncian Jahitan",
+    "Point tidak center": "Pos Assembly & Fitting Center Point",
+    "Lipatan tidak standar": "Pos Manual Folding & Hemming",
+    "Jahitan putus": "Pos Sewing Assembly / Jarum & Benang",
+    "Jahitan loncat": "Pos Timing Looper / Needle Adjustment",
+    "Jahitan keriput": "Pos Material Puller & Tensioner",
+    "Jahitan gelombang": "Pos Setting Presser Foot / Sepatu Mesin",
+    "Ex jarum": "Pos Handling Material & Replacement Needle",
+    "Benang Pecah": "Pos Quality Thread & Needle Bar",
+    "Bahan terlipat/Terjahit": "Pos Operasional Sewing / Manual Handling",
+    "Tepu tidak terpotong": "Pos Trimming & Finishing",
+    "Takure": "Pos Assembly Fitting / Presser Line",
+    "Sampah Benang Terjahit": "Pos Housekeeping & Cleaning Area Sewing",
+    "Noda bahan": "Pos Handling Material & Inspection Fabric",
+    "Part tidak terpasang": "Pos Sub-Assembly & Component Fitting",
+    "Part terpasang terbalik": "Pos Sub-Assembly & Visual Inspection",
+    "Part salah pasang": "Pos Preparation & Kitting Part",
+    "Tidak ada sutechi": "Pos Top Stitching / Sutechi Line",
+    "Part terpasang Double": "Pos Sub-Assembly Line",
+    "Over part": "Pos Material Control & Kitting",
+    "Tidak ada Piping": "Pos Piping Attachment Line",
+    "GAP Bahan Tidak Standar": "Pos Fitting & Alignment Material",
+    "Arah motif terbalik": "Pos Preparation / Cutting & Layout",
+    "Cacat bahan": "Pos Receiving Inspection / Supplier Fabric QC"
+}
+
 FOLDER_DATA_LOKAL = "data_excel"
 FILE_DATABASE_JSON = "monthly_data.json"
 
@@ -369,7 +403,8 @@ def buat_grafik_pareto(df, judul):
     fig.add_trace(
         go.Bar(
             x=data["NG"], y=data["Jumlah"], name="Jumlah NG",
-            marker_color="#3b82f6", marker_line_color="#1d4ed8", marker_line_width=1
+            marker_color="#3b82f6", marker_line_color="#1d4ed8", marker_line_width=1,
+            text=data["Jumlah"], textposition="outside"
         ),
         secondary_y=False
     )
@@ -522,163 +557,6 @@ def buat_grafik_top3_bulanan():
     return fig
 
 # ============================================================
-# FUNGSI EXPORT LAPORAN PDF
-# ============================================================
-
-def buat_gambar_grafik_tren_pdf(df):
-    if not HAS_MATPLOTLIB or df.empty: return None
-    monthly_sum = df.groupby("Bulan")["Jumlah"].sum().reindex(BULAN_LIST).fillna(0).reset_index()
-    monthly_sum = monthly_sum[monthly_sum["Jumlah"] > 0]
-    if monthly_sum.empty: return None
-
-    fig, ax = plt.subplots(figsize=(8, 3.5), dpi=200)
-    fig.patch.set_facecolor('#0b0f19')
-    ax.set_facecolor('#0b0f19')
-
-    max_val = monthly_sum["Jumlah"].max()
-    colors_list = ['#ef4444' if v == max_val else '#3b82f6' for v in monthly_sum["Jumlah"]]
-
-    bars = ax.bar(monthly_sum["Bulan"], monthly_sum["Jumlah"], color=colors_list, width=0.55)
-    for bar in bars:
-        yval = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2.0, yval + (max_val*0.02), f"{int(yval)}", ha='center', va='bottom', color='#f8fafc', fontsize=8, fontweight='bold')
-
-    ax.set_title("Total Defect per Bulan", color='#f8fafc', fontsize=11, pad=12, fontweight='bold')
-    ax.tick_params(colors='#94a3b8', labelsize=8)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#1e293b')
-    ax.spines['bottom'].set_color('#1e293b')
-    ax.grid(axis='y', linestyle='--', alpha=0.3, color='#1e293b')
-    plt.xticks(rotation=20)
-    plt.tight_layout()
-
-    buf = BytesIO()
-    plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none')
-    plt.close(fig)
-    buf.seek(0)
-    return buf
-
-def buat_gambar_grafik_pareto_pdf(df, judul="Analisis Pareto Defect"):
-    if not HAS_MATPLOTLIB or df.empty: return None
-    data = df.groupby("NG")["Jumlah"].sum().reset_index()
-    if data.empty or data["Jumlah"].sum() == 0: return None
-
-    data = data.sort_values("Jumlah", ascending=False).reset_index(drop=True)
-    total_val = data["Jumlah"].sum()
-    data["Persentase"] = (data["Jumlah"] / total_val * 100)
-    data["Kumulatif"] = data["Persentase"].cumsum()
-
-    fig, ax1 = plt.subplots(figsize=(8, 4), dpi=200)
-    fig.patch.set_facecolor('#0b0f19')
-    ax1.set_facecolor('#0b0f19')
-
-    ax1.bar(data["NG"], data["Jumlah"], color='#3b82f6', width=0.5)
-    ax1.set_ylabel("Jumlah Defect", color='#94a3b8', fontsize=9)
-    ax1.tick_params(axis='y', colors='#94a3b8', labelsize=8)
-    ax1.tick_params(axis='x', colors='#94a3b8', labelsize=7, rotation=45)
-
-    ax2 = ax1.twinx()
-    ax2.plot(data["NG"], data["Kumulatif"], color='#f59e0b', marker='o', linewidth=2, markersize=4)
-    ax2.axhline(80, color='#ef4444', linestyle='--', linewidth=1)
-    ax2.set_ylabel("Kumulatif (%)", color='#f59e0b', fontsize=9)
-    ax2.tick_params(axis='y', colors='#f59e0b', labelsize=8)
-    ax2.set_ylim(0, 105)
-
-    ax1.set_title(judul, color='#f8fafc', fontsize=11, pad=12, fontweight='bold')
-    ax1.spines['top'].set_visible(False)
-    ax2.spines['top'].set_visible(False)
-    ax1.grid(axis='y', linestyle='--', alpha=0.2, color='#1e293b')
-
-    plt.tight_layout()
-
-    buf = BytesIO()
-    plt.savefig(buf, format='png', facecolor=fig.get_facecolor(), edgecolor='none')
-    plt.close(fig)
-    buf.seek(0)
-    return buf
-
-def buat_laporan_pdf():
-    if not HAS_REPORTLAB or not HAS_MATPLOTLIB: return None
-    semua_data = buat_dataframe_keseluruhan()
-    if semua_data.empty: return None
-
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
-    )
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#1e293b'), spaceAfter=4)
-    sub_style = ParagraphStyle('SubStyle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#64748b'), spaceAfter=15)
-    sec_style = ParagraphStyle('SecStyle', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#0f172a'), spaceBefore=10, spaceAfter=8)
-
-    elements = []
-    
-    # Header & Metrik Utama
-    elements.append(Paragraph("LAPORAN PUSAT KONTROL KUALITAS D52B", title_style))
-    elements.append(Paragraph("Ringkasan Eksekutif Defect Sewing Assembly & Analisis Pareto", sub_style))
-
-    total_defect = semua_data["Jumlah"].sum()
-    grp_bulan = semua_data.groupby("Bulan")["Jumlah"].sum()
-    bulan_top = grp_bulan.idxmax() if not grp_bulan.empty else "-"
-    val_top = grp_bulan.max() if not grp_bulan.empty else 0
-    top_ng = semua_data.groupby("NG")["Jumlah"].sum().idxmax() if not semua_data.empty else "-"
-
-    metric_data = [
-        ["Total Volume Defect", "Bulan Defect Tertinggi", "Jenis Defect Utama"],
-        [f"{total_defect:,} Pcs".replace(",", "."), f"{bulan_top} ({val_top:,} Pcs)".replace(",", "."), f"{top_ng}"]
-    ]
-    t_metric = Table(metric_data, colWidths=[170, 170, 180])
-    t_metric.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#475569')),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 9),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('BACKGROUND', (0,1), (-1,1), colors.HexColor('#f8fafc')),
-        ('TEXTCOLOR', (0,1), (-1,1), colors.HexColor('#0f172a')),
-        ('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,1), (-1,1), 11),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#cbd5e1')),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-        ('TOPPADDING', (0,0), (-1,-1), 8),
-    ]))
-    elements.append(t_metric)
-    elements.append(Spacer(1, 15))
-
-    # 1. Grafik Tren Bulanan
-    elements.append(Paragraph("1. Grafik Perbandingan Defect Antar Bulan", sec_style))
-    img_buf_trend = buat_gambar_grafik_tren_pdf(semua_data)
-    if img_buf_trend:
-        elements.append(Image(img_buf_trend, width=520, height=220))
-    elements.append(Spacer(1, 15))
-
-    # 2. Grafik Pareto Keseluruhan
-    elements.append(Paragraph("2. Grafik Analisis Pareto Defect Keseluruhan", sec_style))
-    img_buf_pareto_all = buat_gambar_grafik_pareto_pdf(semua_data, "Analisis Pareto Defect (Semua Bulan)")
-    if img_buf_pareto_all:
-        elements.append(Image(img_buf_pareto_all, width=520, height=240))
-    elements.append(Spacer(1, 15))
-
-    # 3. Analisis Pareto Per Bulan
-    elements.append(Paragraph("3. Analisis Pareto Defect Per Bulan", sec_style))
-    
-    for m in BULAN_LIST:
-        df_m = semua_data[semua_data["Bulan"] == m]
-        if not df_m.empty and df_m["Jumlah"].sum() > 0:
-            img_buf_m = buat_gambar_grafik_pareto_pdf(df_m, f"Analisis Pareto Defect — Bulan {m}")
-            if img_buf_m:
-                elements.append(Paragraph(f"<b>• Pareto Defect Bulan {m} (Total: {int(df_m['Jumlah'].sum()):,} Pcs)</b>".replace(",", "."), styles['Normal']))
-                elements.append(Spacer(1, 4))
-                elements.append(Image(img_buf_m, width=500, height=220))
-                elements.append(Spacer(1, 12))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
-
-# ============================================================
 # NAVIGASI SIDEBAR
 # ============================================================
 
@@ -750,31 +628,45 @@ if halaman == "Ringkasan Dashboard":
         if not df_tabel_top3.empty:
             with st.expander("Lihat Tabel Ringkasan Top 3 per Bulan"):
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
+
+        # ============================================================
+        # FITUR BARU SESUAI REVISI: FITUR PILIH BULAN & PARETO BESAR KE KECIL
+        # ============================================================
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 🎯 Analisis Rincian Defect per Bulan (Terurut Besar ke Kecil)")
+        
+        bulan_tersedia = [m for m in BULAN_LIST if m in semua_data["Bulan"].values]
+        if not bulan_tersedia:
+            bulan_tersedia = BULAN_LIST
+
+        col_sel1, col_sel2 = st.columns([1, 2])
+        with col_sel1:
+            bulan_dipilih = st.selectbox("📌 Pilih Bulan Target Analisis", bulan_tersedia, index=0)
+
+        df_bulan_pilihan = buat_dataframe_bulan(bulan_dipilih)
+
+        if not df_bulan_pilihan.empty and df_bulan_pilihan["Jumlah"].sum() > 0:
+            # Grafik Pareto Terurut dari Besar ke Kecil
+            fig_p_bulan = buat_grafik_pareto(df_bulan_pilihan, f"Grafik Semua Defect (Terurut Besar ke Kecil) — Bulan {bulan_dipilih}")
+            st.plotly_chart(fig_p_bulan, use_container_width=True)
+
+            # Keterangan Pos / Area yang Mengeluarkan NG Terbanyak
+            top_ng_row = df_bulan_pilihan.iloc[0]
+            nama_top_ng = top_ng_row["NG"]
+            jumlah_top_ng = int(top_ng_row["Jumlah"])
+            persen_top_ng = round(top_ng_row["Persentase"], 2)
+            pos_penyebab = PEMETAAN_POS_NG.get(nama_top_ng, "Pos Area Sewing Line D52B")
+
+            st.info(f"""
+            **📌 KETERANGAN RINGKASAN DEFECT (BULAN {bulan_dipilih.upper()}):**
+            * **Defect (NG) Terbanyak:** `{nama_top_ng}` sejumlah **{jumlah_top_ng} pcs** ({persen_top_ng}% dari total defect bulan {bulan_dipilih}).
+            * **Pos / Area Penyebab Utama:** Defect ini mayoritas bersumber / dikeluarkan dari **{pos_penyebab}**.
+            """)
         else:
-            st.info("Data belum cukup untuk menampilkan Top 3.")
+            st.warning(f"Belum ada data defect untuk bulan **{bulan_dipilih}**.")
+
     else:
         st.info("Upload data terlebih dahulu untuk melihat grafik tren Top 3.")
-
-    st.markdown("---")
-    c1, c2 = st.columns([2, 1])
-    with c1: st.subheader("Analisis Pareto Defect")
-    with c2: periode = st.selectbox("Filter Periode", ["Semua Bulan"] + BULAN_LIST)
-
-    if periode == "Semua Bulan":
-        df_periode = semua_data.groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
-    else:
-        df_periode = semua_data[semua_data["Bulan"] == periode].groupby("NG")["Jumlah"].sum().reset_index() if not semua_data.empty else pd.DataFrame()
-
-    if not df_periode.empty and df_periode["Jumlah"].sum() > 0:
-        total_p = df_periode["Jumlah"].sum()
-        df_periode["Persentase"] = (df_periode["Jumlah"] / total_p * 100)
-        df_periode = df_periode.sort_values("Jumlah", ascending=False).reset_index(drop=True)
-        df_periode["Kumulatif"] = df_periode["Persentase"].cumsum()
-
-        fig_pareto = buat_grafik_pareto(df_periode, f"Analisis Pareto — {periode}")
-        st.plotly_chart(fig_pareto, use_container_width=True)
-    else:
-        st.warning(f"Tidak ada data ditemukan untuk periode: {periode}")
 
 # ============================================================
 # HALAMAN 2: PARETO BULANAN

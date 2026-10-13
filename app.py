@@ -4,6 +4,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
+import json
 from io import BytesIO
 import re
 
@@ -273,10 +275,35 @@ def baca_sheet_d52b(df, sheet_name):
 # FUNGSI DATABASE GOOGLE DRIVE
 # ============================================================
 
+def get_secret(key, default=None):
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
 def buat_koneksi_drive():
     try:
-        creds_info = dict(st.secrets.get("connections", {}).get("gsheets", {}))
-        if not creds_info: creds_info = dict(st.secrets)
+        creds_info = {}
+        try:
+            if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                creds_info = dict(st.secrets["connections"]["gsheets"])
+            elif "gcp_service_account" in st.secrets:
+                creds_info = dict(st.secrets["gcp_service_account"])
+            elif "private_key" in st.secrets:
+                creds_info = dict(st.secrets)
+        except Exception:
+            pass
+
+        # Fallback ke file lokal gdrive_credentials.json jika secrets belum diset
+        if not creds_info or "private_key" not in creds_info:
+            creds_path = os.path.join(os.path.dirname(__file__), "gdrive_credentials.json")
+            if os.path.exists(creds_path):
+                with open(creds_path, "r", encoding="utf-8") as f:
+                    creds_info = json.load(f)
+
+        if not creds_info or "private_key" not in creds_info:
+            st.error("Kredensial Google Drive tidak ditemukan di secrets maupun gdrive_credentials.json.")
+            return None
 
         if "private_key" in creds_info:
             pk = str(creds_info["private_key"]).strip().strip("'\"").replace("\\n", "\n")
@@ -362,7 +389,7 @@ def sinkronkan_data_dari_drive(folder_id):
 # INISIALISASI SESSION STATE & AUTO-SYNC PERTAMA LOAD
 # ============================================================
 
-DEFAULT_FOLDER_ID = str(st.secrets.get("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJkG3jX3U")).strip()
+DEFAULT_FOLDER_ID = str(get_secret("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJkG3jX3U")).strip()
 
 if "monthly_data" not in st.session_state or "initial_synced" not in st.session_state:
     st.session_state.monthly_data = {m: {} for m in BULAN_LIST}

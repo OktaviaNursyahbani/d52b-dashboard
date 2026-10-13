@@ -156,6 +156,133 @@ if not os.path.exists(FOLDER_DATA_LOKAL):
     os.makedirs(FOLDER_DATA_LOKAL)
 
 # ============================================================
+# PEMETAAN POS & LEADER PENANGGUNG JAWAB BERDASARKAN NG
+# ============================================================
+
+PEMETAAN_POS_LEADER_NG = {
+    "Benang over/ Keluar": {
+        "pos": "Pos Sewing / Benang (Mesin Jahit Line D52B)",
+        "leader": "Kiki (Leader Front Seat Back) / Jupron"
+    },
+    "Jahitan kenceng": {
+        "pos": "Pos Setting Tension / Setting Mesin Sewing",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Benang kendor (Machine)": {
+        "pos": "Pos Maintenance Mesin / Tension Control",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Jarak jahitan tidak standar": {
+        "pos": "Pos Setting Feeding & Stitch Regulator",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "Bahan Balap Tidak Standar": {
+        "pos": "Pos Preparation / Feeding Material",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Langkah Jahitan tidak standar": {
+        "pos": "Pos Operasional Sewing / Stitch Controller",
+        "leader": "Kiki (Leader Front Seat Back)"
+    },
+    "Kuncian putus/ Lepas / Tidak ada": {
+        "pos": "Pos Sewing Backtack / Kuncian Jahitan",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Point tidak center": {
+        "pos": "Pos Assembly & Fitting Center Point",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "Lipatan tidak standar": {
+        "pos": "Pos Manual Folding & Hemming",
+        "leader": "Rosim (Leader No 2 Seat)"
+    },
+    "Jahitan putus": {
+        "pos": "Pos Sewing Assembly / Jarum & Benang",
+        "leader": "Kiki (Leader Front Seat Back)"
+    },
+    "Jahitan loncat": {
+        "pos": "Pos Timing Looper / Needle Adjustment",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Jahitan keriput": {
+        "pos": "Pos Material Puller & Tensioner",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "Jahitan gelombang": {
+        "pos": "Pos Setting Presser Foot / Sepatu Mesin",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Ex jarum": {
+        "pos": "Pos Handling Material & Replacement Needle",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Benang Pecah": {
+        "pos": "Pos Quality Thread & Needle Bar",
+        "leader": "Kiki (Leader Front Seat Back)"
+    },
+    "Bahan terlipat/Terjahit": {
+        "pos": "Pos Operasional Sewing / Manual Handling",
+        "leader": "Rosim (Leader No 2 Seat)"
+    },
+    "Tepu tidak terpotong": {
+        "pos": "Pos Trimming & Finishing",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Takure": {
+        "pos": "Pos Assembly Fitting / Presser Line",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "Sampah Benang Terjahit": {
+        "pos": "Pos Housekeeping & Cleaning Area Sewing",
+        "leader": "Rosim (Leader No 2 Seat)"
+    },
+    "Noda bahan": {
+        "pos": "Pos Handling Material & Inspection Fabric",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Part tidak terpasang": {
+        "pos": "Pos Sub-Assembly & Component Fitting",
+        "leader": "Kiki (Leader Front Seat Back)"
+    },
+    "Part terpasang terbalik": {
+        "pos": "Pos Sub-Assembly & Visual Inspection",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Part salah pasang": {
+        "pos": "Pos Preparation & Kitting Part",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "Tidak ada sutechi": {
+        "pos": "Pos Top Stitching / Sutechi Line",
+        "leader": "Kiki (Leader Front Seat Back)"
+    },
+    "Part terpasang Double": {
+        "pos": "Pos Sub-Assembly Line",
+        "leader": "Heri (Leader Front Seat Cushion)"
+    },
+    "Over part": {
+        "pos": "Pos Material Control & Kitting",
+        "leader": "Rosim (Leader No 2 Seat)"
+    },
+    "Tidak ada Piping": {
+        "pos": "Pos Piping Attachment Line",
+        "leader": "Yunita (Leader Rear Seat Back)"
+    },
+    "GAP Bahan Tidak Standar": {
+        "pos": "Pos Fitting & Alignment Material",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    },
+    "Arah motif terbalik": {
+        "pos": "Pos Preparation / Cutting & Layout",
+        "leader": "Rosim (Leader No 2 Seat)"
+    },
+    "Cacat bahan": {
+        "pos": "Pos Receiving Inspection / Supplier Fabric QC",
+        "leader": "Tiara (Leader Rear Seat Cushion)"
+    }
+}
+
+# ============================================================
 # FUNGSI BANTUAN DATA
 # ============================================================
 
@@ -225,36 +352,16 @@ def cari_ng_dalam_baris(row):
             if norm in JENIS_NG: return norm
     return None
 
-# ============================================================
-# PEMETAAN LEADER SESUAI STRUKTUR D52B (TABEL SEAT)
-# ============================================================
-
-def cari_leader_dan_line(part_name=""):
-    pn = str(part_name).upper()
-    if "FR SEAT BACK" in pn or "71073" in pn or "71074" in pn:
-        return "Kiki", "Line FR SEAT BACK (Front Seat Back)"
-    elif "FR SEAT CUSHION" in pn or "71071" in pn or "71072" in pn:
-        return "Heri", "Line FR SEAT CUSHION (Front Seat Cushion)"
-    elif "RR SEAT BACK" in pn or "71077" in pn or "71078" in pn:
-        return "Yunita", "Line RR SEAT BACK (Rear Seat Back)"
-    elif "RR SEAT CUSHION" in pn or "71075" in pn or "71076" in pn:
-        return "Tiara", "Line RR SEAT CUSHION (Rear Seat Cushion)"
-    elif "NO 2 SEAT" in pn or "79023" in pn or "79021" in pn:
-        return "Rosim", "Line No 2 SEAT (Row 3 Seat Back & Cushion)"
-    else:
-        return "Leader Line Sewing D52B", "Line Sewing Assembly D52B"
+def cari_leader_dan_line_by_ng(nama_ng):
+    ng_norm = normalisasi_nama_ng(nama_ng)
+    if ng_norm in PEMETAAN_POS_LEADER_NG:
+        info = PEMETAAN_POS_LEADER_NG[ng_norm]
+        return info["leader"], info["pos"]
+    return "Jupron / Kiki (Leader Line D52B)", "Pos Sewing Assembly Line D52B"
 
 def baca_sheet_d52b(df, sheet_name):
     bulan = deteksi_bulan_dari_dataframe(df, sheet_name)
     hasil_total = {}
-
-    part_name_found = ""
-    for r in range(min(10, len(df))):
-        for c in range(min(10, len(df.columns))):
-            val = str(df.iloc[r, c])
-            if "COVER S/A" in val.upper() or "SEAT" in val.upper():
-                part_name_found = val
-                break
 
     for idx_baris in range(len(df)):
         baris = df.iloc[idx_baris]
@@ -277,7 +384,6 @@ def baca_sheet_d52b(df, sheet_name):
 
     return {
         "month": bulan,
-        "part_name": part_name_found,
         "total_data": hasil_total,
         "success": len(hasil_total) > 0
     }
@@ -354,13 +460,12 @@ def muat_dan_sinkron_file_lokal():
     return jumlah_file
 
 # ============================================================
-# INISIALISASI SESSION STATE & DUMMY DEFAULT
+# INISIALISASI SESSION STATE
 # ============================================================
 
 if "monthly_data" not in st.session_state or not isinstance(st.session_state.monthly_data, dict):
     st.session_state.monthly_data = muat_database_lokal()
 
-# Ambil data aman
 def get_monthly_dict():
     data = st.session_state.get("monthly_data", {})
     if not isinstance(data, dict):
@@ -645,7 +750,7 @@ if halaman == "Ringkasan Dashboard":
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
 
         # ============================================================
-        # FITUR: PILIH BULAN & ANALISIS POS LEADER
+        # FITUR: PILIH BULAN & PARETO + POS + LEADER
         # ============================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🎯 Analisis Rincian Defect per Bulan (Terurut Besar ke Kecil)")
@@ -669,7 +774,7 @@ if halaman == "Ringkasan Dashboard":
             jumlah_top_ng = int(top_ng_row["Jumlah"])
             persen_top_ng = round(top_ng_row["Persentase"], 2)
 
-            leader_nama, line_area = cari_leader_dan_line(nama_top_ng)
+            leader_nama, line_area = cari_leader_dan_line_by_ng(nama_top_ng)
 
             st.info(f"""
             **📌 KETERANGAN RINGKASAN DEFECT (BULAN {bulan_dipilih.upper()}):**

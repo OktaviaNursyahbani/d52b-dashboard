@@ -4,23 +4,14 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import os
-import json
 from io import BytesIO
 import re
+import os
+import json
 
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-from google.oauth2.service_account import Credentials
-
-# Import opsional untuk ekspor PDF
-try:
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -30,6 +21,8 @@ try:
     HAS_REPORTLAB = True
 except ImportError:
     HAS_REPORTLAB = False
+
+HAS_MATPLOTLIB = True
 
 # ============================================================
 # KONFIGURASI HALAMAN
@@ -156,20 +149,11 @@ JENIS_NG = [
     "Arah motif terbalik", "Cacat bahan"
 ]
 
-PEMETAAN_AREA_LEADER = {
-    "FB RH": {"nama_area": "Front Back RH", "leader": "Bu Kiki"},
-    "FB LH": {"nama_area": "Front Back LH", "leader": "Bu Kiki"},
-    "FC RH": {"nama_area": "Front Cushion RH", "leader": "Pak Heri"},
-    "FC LH": {"nama_area": "Front Cushion LH", "leader": "Pak Heri"},
-    "R1B RH": {"nama_area": "Rear 1 Back RH", "leader": "Bu Yunita"},
-    "R1B LH": {"nama_area": "Rear 1 Back LH", "leader": "Bu Yunita"},
-    "R1C RH": {"nama_area": "Rear 1 Cushion RH", "leader": "Bu Tiara"},
-    "R1C LH": {"nama_area": "Rear 1 Cushion LH", "leader": "Bu Tiara"},
-    "R2B": {"nama_area": "Rear 2 Back", "leader": "Pak Rosim"},
-    "R2C": {"nama_area": "Rear 2 Cushion", "leader": "Pak Rosim"}
-}
+FOLDER_DATA_LOKAL = "data_excel"
+FILE_DATABASE_JSON = "monthly_data.json"
 
-NAMA_AREA = list(PEMETAAN_AREA_LEADER.keys())
+if not os.path.exists(FOLDER_DATA_LOKAL):
+    os.makedirs(FOLDER_DATA_LOKAL)
 
 # ============================================================
 # FUNGSI BANTUAN DATA
@@ -211,11 +195,6 @@ def normalisasi_nama_ng(value):
     for item in JENIS_NG:
         if normalisasi_teks(item) == text: return item
     return str(value).strip()
-
-def normalisasi_area(value):
-    text = normalisasi_teks(value)
-    alias = {a.lower(): a for a in NAMA_AREA}
-    return alias.get(text)
 
 def deteksi_bulan_dari_teks(text):
     if not text: return None
@@ -272,92 +251,42 @@ def baca_sheet_d52b(df, sheet_name):
     return {"month": bulan, "area_data": {}, "total_data": hasil_total, "success": len(hasil_total) > 0}
 
 # ============================================================
-# FUNGSI DATABASE GOOGLE DRIVE
+# FUNGSI LOKAL DATABASE (PENYIMPANAN DI SERVER LOKAL)
 # ============================================================
 
-def get_secret(key, default=None):
+def simpan_database_lokal(data):
     try:
-        return st.secrets.get(key, default)
-    except Exception:
-        return default
+        with open(FILE_DATABASE_JSON, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        st.error(f"Gagal menyimpan ke penyimpanan lokal: {e}")
 
-def buat_koneksi_drive():
-    try:
-        creds_info = {}
+def muat_database_lokal():
+    if os.path.exists(FILE_DATABASE_JSON):
         try:
-            if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-                creds_info = dict(st.secrets["connections"]["gsheets"])
-            elif "gcp_service_account" in st.secrets:
-                creds_info = dict(st.secrets["gcp_service_account"])
-            elif "private_key" in st.secrets:
-                creds_info = dict(st.secrets)
+            with open(FILE_DATABASE_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
         except Exception:
             pass
+    return {m: {} for m in BULAN_LIST}
 
-        # Fallback ke file lokal gdrive_credentials.json jika secrets belum diset
-        if not creds_info or "private_key" not in creds_info:
-            creds_path = os.path.join(os.path.dirname(__file__), "gdrive_credentials.json")
-            if os.path.exists(creds_path):
-                with open(creds_path, "r", encoding="utf-8") as f:
-                    creds_info = json.load(f)
+def muat_dan_sinkron_file_lokal():
+    data_bulanan = {m: {} for m in BULAN_LIST}
+    jumlah_file = 0
 
-        if not creds_info or "private_key" not in creds_info:
-            st.error("Kredensial Google Drive tidak ditemukan di secrets maupun gdrive_credentials.json.")
-            return None
+    if not os.path.exists(FOLDER_DATA_LOKAL):
+        return 0
 
-        if "private_key" in creds_info:
-            pk = str(creds_info["private_key"]).strip().strip("'\"").replace("\\n", "\n")
-            if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
-                core_key = pk.split("-----BEGIN PRIVATE KEY-----")[1].split("-----END PRIVATE KEY-----")[0].strip()
-                core_key = "".join(core_key.split())
-                pk = f"-----BEGIN PRIVATE KEY-----\n{core_key}\n-----END PRIVATE KEY-----\n"
-            creds_info["private_key"] = pk
+    files = [f for f in os.listdir(FOLDER_DATA_LOKAL) if f.endswith(('.xlsx', '.xls'))]
+    if not files:
+        return 0
 
-        scopes = ['https://www.googleapis.com/auth/drive']
-        creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-        return build('drive', 'v3', credentials=creds)
-    except Exception as e:
-        st.error(f"Koneksi Google Drive Gagal: {e}")
-        return None
+    for file_name in files:
+        file_path = os.path.join(FOLDER_DATA_LOKAL, file_name)
+        bulan_file = deteksi_bulan_dari_teks(file_name)
 
-def unggah_file_ke_drive(file_bytes, file_name, folder_id):
-    service = buat_koneksi_drive()
-    if not service: return False
-
-    try:
-        clean_folder_id = str(folder_id).strip().strip("'\"")
-        file_metadata = {'name': file_name, 'parents': [clean_folder_id]}
-        media = MediaIoBaseUpload(BytesIO(file_bytes), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        
-        service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        return True
-    except Exception as e:
-        st.error(f"Gagal mengunggah file ke Google Drive: {e}")
-        return False
-
-def sinkronkan_data_dari_drive(folder_id):
-    service = buat_koneksi_drive()
-    if not service: return 0
-
-    try:
-        clean_folder_id = str(folder_id).strip().strip("'\"")
-        query = f"'{clean_folder_id}' in parents and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false"
-        results = service.files().list(q=query, fields="files(id, name)").execute()
-        files = results.get('files', [])
-
-        if not files: return 0
-
-        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-        jumlah_file = 0
-
-        for file in files:
-            file_name = file.get('name', '')
-            bulan_file = deteksi_bulan_dari_teks(file_name)
-
-            request = service.files().get_media(fileId=file['id'])
-            file_stream = BytesIO(request.execute())
-            excel = pd.ExcelFile(file_stream)
-
+        try:
+            excel = pd.ExcelFile(file_path)
             target_sheet = None
             for s in excel.sheet_names:
                 if "SUMMARY" in s.upper() or "REKAP" in s.upper():
@@ -368,36 +297,34 @@ def sinkronkan_data_dari_drive(folder_id):
                 target_sheet = excel.sheet_names[0]
 
             if target_sheet:
-                df_sheet = pd.read_excel(file_stream, sheet_name=target_sheet, header=None)
+                df_sheet = pd.read_excel(file_path, sheet_name=target_sheet, header=None)
                 parsed = baca_sheet_d52b(df_sheet, target_sheet)
 
                 m = bulan_file or parsed.get("month") or deteksi_bulan_dari_teks(target_sheet)
 
                 if m:
                     for ng, total in parsed.get("total_data", {}).items():
-                        if ng not in st.session_state.monthly_data[m]:
-                            st.session_state.monthly_data[m][ng] = 0
-                        st.session_state.monthly_data[m][ng] += total
+                        if ng not in data_bulanan[m]:
+                            data_bulanan[m][ng] = 0
+                        data_bulanan[m][ng] += total
                     jumlah_file += 1
+        except Exception as e:
+            st.error(f"Error membaca file {file_name}: {e}")
 
-        return jumlah_file
-    except Exception as e:
-        st.error(f"Error membaca dari Google Drive: {e}")
-        return 0
+    simpan_database_lokal(data_bulanan)
+    st.session_state.monthly_data = data_bulanan
+    return jumlah_file
 
 # ============================================================
-# INISIALISASI SESSION STATE & AUTO-SYNC PERTAMA LOAD
+# INISIALISASI SESSION STATE & AUTO-LOAD
 # ============================================================
 
-DEFAULT_FOLDER_ID = str(get_secret("folder_id", "1XcgufwfNDrkOtdrXH34W6nybJkG3jX3U")).strip()
-
-if "monthly_data" not in st.session_state or "initial_synced" not in st.session_state:
-    st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-    try:
-        sinkronkan_data_dari_drive(DEFAULT_FOLDER_ID)
-        st.session_state.initial_synced = True
-    except Exception:
-        pass
+if "monthly_data" not in st.session_state or "initial_loaded" not in st.session_state:
+    if os.path.exists(FILE_DATABASE_JSON):
+        st.session_state.monthly_data = muat_database_lokal()
+    else:
+        muat_dan_sinkron_file_lokal()
+    st.session_state.initial_loaded = True
 
 def buat_dataframe_bulan(bulan):
     data = st.session_state.monthly_data.get(bulan, {})
@@ -772,7 +699,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.caption("Penyimpanan Database: **Google Drive Folder**")
+    st.caption("Penyimpanan Database: **Penyimpanan Lokal Server**")
 
 # ============================================================
 # HALAMAN 1: RINGKASAN DASHBOARD
@@ -780,7 +707,7 @@ with st.sidebar:
 
 if halaman == "Ringkasan Dashboard":
     st.title("Ringkasan Eksekutif Kualitas")
-    st.caption("Analisis Defect Real-Time Berbasis Folder Google Drive")
+    st.caption("Analisis Defect Real-Time Berbasis Penyimpanan Lokal")
 
     semua_data = buat_dataframe_keseluruhan()
     total_ng_semua = semua_data["Jumlah"].sum() if not semua_data.empty else 0
@@ -808,7 +735,7 @@ if halaman == "Ringkasan Dashboard":
         fig_trend = buat_grafik_tren_bulanan(semua_data)
         if fig_trend: st.plotly_chart(fig_trend, use_container_width=True)
     else:
-        st.info("Belum ada data. Silakan lakukan sinkronisasi dari Google Drive di menu 'Upload / Sinkronisasi Data'.")
+        st.info("Belum ada data. Silakan lakukan upload di menu 'Upload / Sinkronisasi Data'.")
 
     st.markdown("---")
     st.subheader("Top 3 Defect per Bulan")
@@ -826,7 +753,7 @@ if halaman == "Ringkasan Dashboard":
         else:
             st.info("Data belum cukup untuk menampilkan Top 3.")
     else:
-        st.info("Sinkronkan data terlebih dahulu untuk melihat grafik tren Top 3.")
+        st.info("Upload data terlebih dahulu untuk melihat grafik tren Top 3.")
 
     st.markdown("---")
     c1, c2 = st.columns([2, 1])
@@ -905,102 +832,16 @@ elif halaman == "Editor Data":
             if qty > 0: data_baru[str(r["Kategori Defect"])] = qty
 
         st.session_state.monthly_data[bulan_edit] = data_baru
-        st.success(f"Data sesi berhasil diperbarui untuk bulan {bulan_edit}.")
+        simpan_database_lokal(st.session_state.monthly_data)
+        st.success(f"Data berhasil diperbarui dan tersimpan untuk bulan {bulan_edit}.")
 
 # ============================================================
-# HALAMAN 4: UPLOAD & SINKRONISASI DATA
+# HALAMAN 4: UPLOAD & SINKRONISASI DATA (TANPA GOOGLE DRIVE)
 # ============================================================
 
 elif halaman == "Upload / Sinkronisasi Data":
-    st.title("Impor Data & Sinkronisasi")
-    st.caption("Seluruh file Excel yang di-upload akan tersimpan otomatis ke Folder Google Drive.")
+    st.title("Impor Data Excel & Manajemen File")
+    st.caption("Upload file rekap Excel (.xlsx / .xls). Seluruh file akan tersimpan aman di server lokal.")
 
-    tab1, tab2 = st.tabs(["📁 Metode 1: Auto Sync Google Drive", "📤 Metode 2: Upload File Manual"])
-
-    with tab1:
-        st.subheader("Baca Otomatis Folder Google Drive")
-        st.info("Sistem akan memindai folder Google Drive dan memproses seluruh file Excel di dalamnya.")
-        
-        folder_input = st.text_input("ID Folder Google Drive", value=DEFAULT_FOLDER_ID)
-
-        if st.button("🔄 Sync Data dari Google Drive", type="primary"):
-            with st.spinner("Membaca dan memproses file dari Google Drive..."):
-                synced_count = sinkronkan_data_dari_drive(folder_input)
-                if synced_count > 0:
-                    st.success(f"Berhasil membaca {synced_count} file rekap dari Google Drive!")
-                else:
-                    st.warning("Tidak ada file Excel yang ditemukan di folder ini atau folder tidak dapat diakses.")
-
-    with tab2:
-        st.subheader("Upload File Excel Langsung ke Google Drive")
-        uploaded_file = st.file_uploader("Pilih File Excel (.xlsx)", type=["xlsx", "xls"])
-
-        if uploaded_file is not None:
-            if st.button("🚀 Upload File & Sync Dashboard", type="primary"):
-                with st.spinner("Mengunggah file ke Google Drive..."):
-                    file_bytes = uploaded_file.getvalue()
-                    file_name = uploaded_file.name
-
-                    if unggah_file_ke_drive(file_bytes, file_name, folder_input):
-                        st.success(f"File **{file_name}** berhasil tersimpan di Google Drive!")
-                        
-                        synced = sinkronkan_data_dari_drive(folder_input)
-                        st.success(f"Dashboard berhasil disinkronkan dari Google Drive! ({synced} file terproses)")
-
-    st.markdown("---")
-    st.subheader("🗑️ Bersihkan Data Sesi")
-    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tampil di dashboard dan memulai dari awal.")
-
-    if st.button("🚨 Hapus / Clear Seluruh Data Dashboard"):
-        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
-        st.success("Seluruh data dashboard berhasil dibersihkan!")
-        st.rerun()
-
-# ============================================================
-# HALAMAN 5: EKSPOR LAPORAN
-# ============================================================
-
-elif halaman == "Ekspor Laporan":
-    st.title("Ekspor & Manajemen Data Laporan")
-    st.caption("Unduh laporan dalam format file Spreadsheet (Excel) atau Dokumen Ringkasan PDF (Grafik All & Per Bulan).")
-
-    semua_rekap = buat_dataframe_keseluruhan()
-
-    if semua_rekap.empty:
-        st.info("Belum ada data yang tersedia untuk diekspor.")
-    else:
-        col_pdf, col_excel = st.columns(2)
-
-        with col_pdf:
-            st.subheader("📄 Laporan PDF (Grafik All & Pareto Per Bulan)")
-            st.caption("Mencakup ringkasan metrik utama, grafik perbandingan bulanan, grafik Pareto All, dan Pareto per bulan.")
-            if HAS_REPORTLAB and HAS_MATPLOTLIB:
-                pdf_data = buat_laporan_pdf()
-                if pdf_data:
-                    st.download_button(
-                        label="📄 Unduh Laporan PDF Dashboard (Lengkap)",
-                        data=pdf_data.getvalue(),
-                        file_name="Laporan_Kualitas_D52B_Lengkap.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
-            else:
-                st.warning("Pastikan `matplotlib` dan `reportlab` sudah ditambahkan ke `requirements.txt` di GitHub.")
-
-        with col_excel:
-            st.subheader("📊 Laporan Excel (Data Mentah)")
-            st.caption("Menyimpan seluruh data tabular rekapitulasi defect untuk keperluan analisis spreadsheet.")
-            buffer_excel = BytesIO()
-            with pd.ExcelWriter(buffer_excel, engine="openpyxl") as writer:
-                semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
-
-            st.download_button(
-                label="📊 Unduh Laporan Excel",
-                data=buffer_excel.getvalue(),
-                file_name="Laporan_Kualitas_D52B.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        st.markdown("---")
-        st.subheader("Tinjauan Data Rekapitulasi")
-        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)
+    st.subheader("📤 Upload File Rekap Excel")
+    uploaded_files = st.file_uploader("Pilih File Excel

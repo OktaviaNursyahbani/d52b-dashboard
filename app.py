@@ -149,130 +149,6 @@ JENIS_NG = [
     "Arah motif terbalik", "Cacat bahan"
 ]
 
-# Pemetaan Pos Line & Leader Penanggung Jawab berdasarkan Jenis Defect (NG)
-PEMETAAN_POS_DAN_LEADER = {
-    "Benang over/ Keluar": {
-        "pos": "Pos Sewing / Benang (Mesin Jahit Line D52B)",
-        "leader": "Jupron (Leader Sewing) / Enang"
-    },
-    "Jahitan kenceng": {
-        "pos": "Pos Setting Tension / Setting Mesin Sewing",
-        "leader": "Edy (Leader Maintenance & Setting)"
-    },
-    "Benang kendor (Machine)": {
-        "pos": "Pos Maintenance Mesin / Tension Control",
-        "leader": "Edy (Leader Maintenance)"
-    },
-    "Jarak jahitan tidak standar": {
-        "pos": "Pos Setting Feeding & Stitch Regulator",
-        "leader": "Jupron (Leader Line)"
-    },
-    "Bahan Balap Tidak Standar": {
-        "pos": "Pos Preparation / Feeding Material",
-        "leader": "Erna (Leader Prep & Material)"
-    },
-    "Langkah Jahitan tidak standar": {
-        "pos": "Pos Operasional Sewing / Stitch Controller",
-        "leader": "Jupron (Leader Sewing)"
-    },
-    "Kuncian putus/ Lepas / Tidak ada": {
-        "pos": "Pos Sewing Backtack / Kuncian Jahitan",
-        "leader": "Enang (Leader Operasional)"
-    },
-    "Point tidak center": {
-        "pos": "Pos Assembly & Fitting Center Point",
-        "leader": "Enang (Leader Assembly)"
-    },
-    "Lipatan tidak standar": {
-        "pos": "Pos Manual Folding & Hemming",
-        "leader": "Erna (Leader Preparation)"
-    },
-    "Jahitan putus": {
-        "pos": "Pos Sewing Assembly / Jarum & Benang",
-        "leader": "Jupron (Leader Line)"
-    },
-    "Jahitan loncat": {
-        "pos": "Pos Timing Looper / Needle Adjustment",
-        "leader": "Edy (Leader Maintenance)"
-    },
-    "Jahitan keriput": {
-        "pos": "Pos Material Puller & Tensioner",
-        "leader": "Jupron (Leader Sewing)"
-    },
-    "Jahitan gelombang": {
-        "pos": "Pos Setting Presser Foot / Sepatu Mesin",
-        "leader": "Edy (Leader Setting)"
-    },
-    "Ex jarum": {
-        "pos": "Pos Handling Material & Replacement Needle",
-        "leader": "Enang (Leader Line)"
-    },
-    "Benang Pecah": {
-        "pos": "Pos Quality Thread & Needle Bar",
-        "leader": "Edy (Leader Maintenance)"
-    },
-    "Bahan terlipat/Terjahit": {
-        "pos": "Pos Operasional Sewing / Manual Handling",
-        "leader": "Jupron (Leader Sewing)"
-    },
-    "Tepu tidak terpotong": {
-        "pos": "Pos Trimming & Finishing",
-        "leader": "Erna (Leader Finishing)"
-    },
-    "Takure": {
-        "pos": "Pos Assembly Fitting / Presser Line",
-        "leader": "Enang (Leader Assembly)"
-    },
-    "Sampah Benang Terjahit": {
-        "pos": "Pos Housekeeping & Cleaning Area Sewing",
-        "leader": "Erna (Leader Area)"
-    },
-    "Noda bahan": {
-        "pos": "Pos Handling Material & Inspection Fabric",
-        "leader": "Erna (Leader Material QC)"
-    },
-    "Part tidak terpasang": {
-        "pos": "Pos Sub-Assembly & Component Fitting",
-        "leader": "Enang (Leader Sub-Assy)"
-    },
-    "Part terpasang terbalik": {
-        "pos": "Pos Sub-Assembly & Visual Inspection",
-        "leader": "Enang (Leader Sub-Assy)"
-    },
-    "Part salah pasang": {
-        "pos": "Pos Preparation & Kitting Part",
-        "leader": "Erna (Leader Kitting)"
-    },
-    "Tidak ada sutechi": {
-        "pos": "Pos Top Stitching / Sutechi Line",
-        "leader": "Jupron (Leader Top Stitching)"
-    },
-    "Part terpasang Double": {
-        "pos": "Pos Sub-Assembly Line",
-        "leader": "Enang (Leader Sub-Assy)"
-    },
-    "Over part": {
-        "pos": "Pos Material Control & Kitting",
-        "leader": "Erna (Leader Kitting)"
-    },
-    "Tidak ada Piping": {
-        "pos": "Pos Piping Attachment Line",
-        "leader": "Jupron (Leader Line)"
-    },
-    "GAP Bahan Tidak Standar": {
-        "pos": "Pos Fitting & Alignment Material",
-        "leader": "Enang (Leader Fitting)"
-    },
-    "Arah motif terbalik": {
-        "pos": "Pos Preparation / Cutting & Layout",
-        "leader": "Erna (Leader Preparation)"
-    },
-    "Cacat bahan": {
-        "pos": "Pos Receiving Inspection / Supplier Fabric QC",
-        "leader": "Erna (Leader Material Inspection)"
-    }
-}
-
 FOLDER_DATA_LOKAL = "data_excel"
 FILE_DATABASE_JSON = "monthly_data.json"
 
@@ -349,9 +225,36 @@ def cari_ng_dalam_baris(row):
             if norm in JENIS_NG: return norm
     return None
 
+# ============================================================
+# PEMETAAN LEADER SESUAI STRUKTUR D52B (TABEL BARU)
+# ============================================================
+
+def cari_leader_dan_line(part_name=""):
+    pn = part_name.upper()
+    if "FR SEAT BACK" in pn or "71073" in pn or "71074" in pn:
+        return "Kiki", "Line FR SEAT BACK (Front Seat Back)"
+    elif "FR SEAT CUSHION" in pn or "71071" in pn or "71072" in pn:
+        return "Heri", "Line FR SEAT CUSHION (Front Seat Cushion)"
+    elif "RR SEAT BACK" in pn or "71077" in pn or "71078" in pn:
+        return "Yunita", "Line RR SEAT BACK (Rear Seat Back)"
+    elif "RR SEAT CUSHION" in pn or "71075" in pn or "71076" in pn:
+        return "Tiara", "Line RR SEAT CUSHION (Rear Seat Cushion)"
+    elif "NO 2 SEAT" in pn or "79023" in pn or "79021" in pn:
+        return "Rosim", "Line No 2 SEAT (Row 3 Seat Back & Cushion)"
+    else:
+        return "Leader Line Sewing D52B", "Line Sewing Assembly D52B"
+
 def baca_sheet_d52b(df, sheet_name):
     bulan = deteksi_bulan_dari_dataframe(df, sheet_name)
     hasil_total = {}
+
+    part_name_found = ""
+    for r in range(min(10, len(df))):
+        for c in range(min(10, len(df.columns))):
+            val = str(df.iloc[r, c])
+            if "COVER S/A" in val.upper() or "SEAT" in val.upper():
+                part_name_found = val
+                break
 
     for idx_baris in range(len(df)):
         baris = df.iloc[idx_baris]
@@ -372,10 +275,15 @@ def baca_sheet_d52b(df, sheet_name):
         if total_val > 0:
             hasil_total[nama_ng] = total_val
 
-    return {"month": bulan, "area_data": {}, "total_data": hasil_total, "success": len(hasil_total) > 0}
+    return {
+        "month": bulan,
+        "part_name": part_name_found,
+        "total_data": hasil_total,
+        "success": len(hasil_total) > 0
+    }
 
 # ============================================================
-# FUNGSI LOKAL DATABASE (PENYIMPANAN DI SERVER LOKAL)
+# FUNGSI LOKAL DATABASE
 # ============================================================
 
 def simpan_database_lokal(data):
@@ -440,7 +348,7 @@ def muat_dan_sinkron_file_lokal():
     return jumlah_file
 
 # ============================================================
-# INISIALISASI SESSION STATE & AUTO-LOAD
+# INISIALISASI SESSION STATE
 # ============================================================
 
 if "monthly_data" not in st.session_state or "initial_loaded" not in st.session_state:
@@ -473,7 +381,7 @@ def buat_dataframe_keseluruhan():
     return pd.DataFrame(baris) if baris else pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
 
 # ============================================================
-# GRAFIK PLOTLY RESPONTIF
+# GRAFIK PLOTLY
 # ============================================================
 
 TEMA_GELAP = dict(
@@ -720,7 +628,7 @@ if halaman == "Ringkasan Dashboard":
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
 
         # ============================================================
-        # FITUR: PILIH BULAN & ANALISIS POS + LEADER
+        # FITUR: PILIH BULAN & PARETO + LEADER TERI
         # ============================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🎯 Analisis Rincian Defect per Bulan (Terurut Besar ke Kecil)")
@@ -736,28 +644,21 @@ if halaman == "Ringkasan Dashboard":
         df_bulan_pilihan = buat_dataframe_bulan(bulan_dipilih)
 
         if not df_bulan_pilihan.empty and df_bulan_pilihan["Jumlah"].sum() > 0:
-            # Grafik Pareto Terurut dari Besar ke Kecil
             fig_p_bulan = buat_grafik_pareto(df_bulan_pilihan, f"Grafik Semua Defect (Terurut Besar ke Kecil) — Bulan {bulan_dipilih}")
             st.plotly_chart(fig_p_bulan, use_container_width=True)
 
-            # Keterangan Pos / Area & Leader Penanggung Jawab
             top_ng_row = df_bulan_pilihan.iloc[0]
             nama_top_ng = top_ng_row["NG"]
             jumlah_top_ng = int(top_ng_row["Jumlah"])
             persen_top_ng = round(top_ng_row["Persentase"], 2)
-            
-            info_detail = PEMETAAN_POS_DAN_LEADER.get(nama_top_ng, {
-                "pos": "Pos Area Sewing Line D52B",
-                "leader": "Jupron / Enang (Leader Line D52B)"
-            })
-            pos_penyebab = info_detail["pos"]
-            leader_penyebab = info_detail["leader"]
+
+            leader_nama, line_area = cari_leader_dan_line(nama_top_ng)
 
             st.info(f"""
             **📌 KETERANGAN RINGKASAN DEFECT (BULAN {bulan_dipilih.upper()}):**
             * **Defect (NG) Terbanyak:** `{nama_top_ng}` sejumlah **{jumlah_top_ng} pcs** ({persen_top_ng}% dari total defect bulan {bulan_dipilih}).
-            * **Pos / Area Line Utama:** Defect ini mayoritas bersumber / dikeluarkan dari **{pos_penyebab}**.
-            * **Leader Penanggung Jawab:** **{leader_penyebab}**.
+            * **Pos / Area Line Utama:** **{line_area}**.
+            * **Leader Penanggung Jawab:** **{leader_nama}**.
             """)
         else:
             st.warning(f"Belum ada data defect untuk bulan **{bulan_dipilih}**.")
@@ -825,7 +726,7 @@ elif halaman == "Editor Data":
         st.success(f"Data berhasil diperbarui dan tersimpan untuk bulan {bulan_edit}.")
 
 # ============================================================
-# HALAMAN 4: UPLOAD & SINKRONISASI DATA (TANPA GOOGLE DRIVE)
+# HALAMAN 4: UPLOAD & SINKRONISASI DATA
 # ============================================================
 
 elif halaman == "Upload / Sinkronisasi Data":

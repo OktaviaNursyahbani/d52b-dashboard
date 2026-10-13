@@ -844,4 +844,98 @@ elif halaman == "Upload / Sinkronisasi Data":
     st.caption("Upload file rekap Excel (.xlsx / .xls). Seluruh file akan tersimpan aman di server lokal.")
 
     st.subheader("📤 Upload File Rekap Excel")
-    uploaded_files = st.file_uploader("Pilih File Excel
+    uploaded_files = st.file_uploader("Pilih File Excel Rekap Bulanan", type=["xlsx", "xls"], accept_multiple_files=True)
+
+    if uploaded_files:
+        if st.button("🚀 Upload & Proses Data Excel", type="primary"):
+            files_saved = 0
+            for uploaded_file in uploaded_files:
+                file_path = os.path.join(FOLDER_DATA_LOKAL, uploaded_file.name)
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                files_saved += 1
+            
+            terproses = muat_dan_sinkron_file_lokal()
+            st.success(f"Berhasil mengunggah {files_saved} file dan memperbarui database dashboard! ({terproses} file terproses)")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📁 Daftar File Terimpan di Server Lokal")
+    files_lokal = [f for f in os.listdir(FOLDER_DATA_LOKAL) if f.endswith(('.xlsx', '.xls'))]
+    
+    if files_lokal:
+        for f_name in files_lokal:
+            col_f1, col_f2 = st.columns([4, 1])
+            with col_f1:
+                st.write(f"📄 **{f_name}**")
+            with col_f2:
+                if st.button("🗑️ Hapus", key=f"del_{f_name}"):
+                    os.remove(os.path.join(FOLDER_DATA_LOKAL, f_name))
+                    muat_dan_sinkron_file_lokal()
+                    st.success(f"File {f_name} berhasil dihapus.")
+                    st.rerun()
+    else:
+        st.info("Belum ada file Excel yang di-upload.")
+
+    st.markdown("---")
+    st.subheader("🗑️ Bersihkan Seluruh Data")
+    st.caption("Gunakan tombol ini jika ingin menghapus seluruh data yang tersimpan.")
+
+    if st.button("🚨 Hapus / Clear Seluruh Data"):
+        st.session_state.monthly_data = {m: {} for m in BULAN_LIST}
+        if os.path.exists(FILE_DATABASE_JSON):
+            os.remove(FILE_DATABASE_JSON)
+        for f in os.listdir(FOLDER_DATA_LOKAL):
+            if f.endswith(('.xlsx', '.xls')):
+                os.remove(os.path.join(FOLDER_DATA_LOKAL, f))
+        st.success("Seluruh data berhasil dibersihkan!")
+        st.rerun()
+
+# ============================================================
+# HALAMAN 5: EKSPOR LAPORAN
+# ============================================================
+
+elif halaman == "Ekspor Laporan":
+    st.title("Ekspor & Manajemen Data Laporan")
+    st.caption("Unduh laporan dalam format file Spreadsheet (Excel) atau Dokumen Ringkasan PDF (Grafik All & Per Bulan).")
+
+    semua_rekap = buat_dataframe_keseluruhan()
+
+    if semua_rekap.empty:
+        st.info("Belum ada data yang tersedia untuk diekspor.")
+    else:
+        col_pdf, col_excel = st.columns(2)
+
+        with col_pdf:
+            st.subheader("📄 Laporan PDF (Grafik All & Pareto Per Bulan)")
+            st.caption("Mencakup ringkasan metrik utama, grafik perbandingan bulanan, grafik Pareto All, dan Pareto per bulan.")
+            if HAS_REPORTLAB and HAS_MATPLOTLIB:
+                pdf_data = buat_laporan_pdf()
+                if pdf_data:
+                    st.download_button(
+                        label="📄 Unduh Laporan PDF Dashboard (Lengkap)",
+                        data=pdf_data.getvalue(),
+                        file_name="Laporan_Kualitas_D52B_Lengkap.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+            else:
+                st.warning("Pustaka pembentuk PDF belum siap.")
+
+        with col_excel:
+            st.subheader("📊 Laporan Excel (Data Mentah)")
+            st.caption("Menyimpan seluruh data tabular rekapitulasi defect untuk keperluan analisis spreadsheet.")
+            buffer_excel = BytesIO()
+            with pd.ExcelWriter(buffer_excel, engine="openpyxl") as writer:
+                semua_rekap.to_excel(writer, sheet_name="Ringkasan Defect", index=False)
+
+            st.download_button(
+                label="📊 Unduh Laporan Excel",
+                data=buffer_excel.getvalue(),
+                file_name="Laporan_Kualitas_D52B.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        st.markdown("---")
+        st.subheader("Tinjauan Data Rekapitulasi")
+        st.dataframe(semua_rekap, use_container_width=True, hide_index=True)

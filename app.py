@@ -226,11 +226,11 @@ def cari_ng_dalam_baris(row):
     return None
 
 # ============================================================
-# PEMETAAN LEADER SESUAI STRUKTUR D52B (TABEL BARU)
+# PEMETAAN LEADER SESUAI STRUKTUR D52B (TABEL SEAT)
 # ============================================================
 
 def cari_leader_dan_line(part_name=""):
-    pn = part_name.upper()
+    pn = str(part_name).upper()
     if "FR SEAT BACK" in pn or "71073" in pn or "71074" in pn:
         return "Kiki", "Line FR SEAT BACK (Front Seat Back)"
     elif "FR SEAT CUSHION" in pn or "71071" in pn or "71072" in pn:
@@ -283,7 +283,7 @@ def baca_sheet_d52b(df, sheet_name):
     }
 
 # ============================================================
-# FUNGSI LOKAL DATABASE
+# FUNGSI LOKAL DATABASE & AMAN DARI ERROR
 # ============================================================
 
 def simpan_database_lokal(data):
@@ -297,7 +297,13 @@ def muat_database_lokal():
     if os.path.exists(FILE_DATABASE_JSON):
         try:
             with open(FILE_DATABASE_JSON, "r", encoding="utf-8") as f:
-                return json.load(f)
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    res = {m: {} for m in BULAN_LIST}
+                    for m in BULAN_LIST:
+                        if m in loaded and isinstance(loaded[m], dict):
+                            res[m] = loaded[m]
+                    return res
         except Exception:
             pass
     return {m: {} for m in BULAN_LIST}
@@ -334,7 +340,7 @@ def muat_dan_sinkron_file_lokal():
 
                 m = bulan_file or parsed.get("month") or deteksi_bulan_dari_teks(target_sheet)
 
-                if m:
+                if m and m in data_bulanan:
                     for ng, total in parsed.get("total_data", {}).items():
                         if ng not in data_bulanan[m]:
                             data_bulanan[m][ng] = 0
@@ -348,19 +354,25 @@ def muat_dan_sinkron_file_lokal():
     return jumlah_file
 
 # ============================================================
-# INISIALISASI SESSION STATE
+# INISIALISASI SESSION STATE & DUMMY DEFAULT
 # ============================================================
 
-if "monthly_data" not in st.session_state or "initial_loaded" not in st.session_state:
-    if os.path.exists(FILE_DATABASE_JSON):
-        st.session_state.monthly_data = muat_database_lokal()
-    else:
-        muat_dan_sinkron_file_lokal()
-    st.session_state.initial_loaded = True
+if "monthly_data" not in st.session_state or not isinstance(st.session_state.monthly_data, dict):
+    st.session_state.monthly_data = muat_database_lokal()
+
+# Ambil data aman
+def get_monthly_dict():
+    data = st.session_state.get("monthly_data", {})
+    if not isinstance(data, dict):
+        data = {m: {} for m in BULAN_LIST}
+        st.session_state.monthly_data = data
+    return data
 
 def buat_dataframe_bulan(bulan):
-    data = st.session_state.monthly_data.get(bulan, {})
-    if not data: return pd.DataFrame(columns=["NG", "Jumlah", "Persentase", "Kumulatif"])
+    monthly_dict = get_monthly_dict()
+    data = monthly_dict.get(bulan, {})
+    if not isinstance(data, dict) or not data:
+        return pd.DataFrame(columns=["NG", "Jumlah", "Persentase", "Kumulatif"])
 
     df = pd.DataFrame(list(data.items()), columns=["NG", "Jumlah"])
     df["Jumlah"] = pd.to_numeric(df["Jumlah"], errors="coerce").fillna(0)
@@ -375,9 +387,14 @@ def buat_dataframe_bulan(bulan):
 
 def buat_dataframe_keseluruhan():
     baris = []
+    monthly_dict = get_monthly_dict()
     for m in BULAN_LIST:
-        for ng_name, jmh in st.session_state.monthly_data.get(m, {}).items():
-            if jmh > 0: baris.append({"Bulan": m, "NG": ng_name, "Jumlah": jmh})
+        m_data = monthly_dict.get(m, {})
+        if isinstance(m_data, dict):
+            for ng_name, jmh in m_data.items():
+                qty = bersihkan_angka(jmh)
+                if qty > 0:
+                    baris.append({"Bulan": m, "NG": ng_name, "Jumlah": qty})
     return pd.DataFrame(baris) if baris else pd.DataFrame(columns=["Bulan", "NG", "Jumlah"])
 
 # ============================================================
@@ -628,7 +645,7 @@ if halaman == "Ringkasan Dashboard":
                 st.dataframe(df_tabel_top3, use_container_width=True, hide_index=True)
 
         # ============================================================
-        # FITUR: PILIH BULAN & PARETO + LEADER TERI
+        # FITUR: PILIH BULAN & ANALISIS POS LEADER
         # ============================================================
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("### 🎯 Analisis Rincian Defect per Bulan (Terurut Besar ke Kecil)")
@@ -703,7 +720,7 @@ elif halaman == "Editor Data":
     st.caption("Penyesuaian jumlah defect sesi aktif")
 
     bulan_edit = st.selectbox("Pilih Bulan yang Ingin Ditinjau", BULAN_LIST)
-    data_saat_ini = st.session_state.monthly_data.get(bulan_edit, {})
+    data_saat_ini = get_monthly_dict().get(bulan_edit, {})
 
     baris_editor = [{"Kategori Defect": ng, "Jumlah": data_saat_ini.get(ng, 0)} for ng in JENIS_NG]
     df_editor = pd.DataFrame(baris_editor)
